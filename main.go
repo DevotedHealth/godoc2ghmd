@@ -37,7 +37,7 @@ var (
 	// layout control
 	tabWidth          = flag.Int("tabwidth", 4, "tab width")
 	showTimestamps    = flag.Bool("timestamps", false, "show timestamps with directory listings")
-	templateDir       = flag.String("templates", "", "directory containing alternate template files")
+	templatePath      = flag.String("template", "", "path to an alternate template file in go's template language")
 	showPlayground    = flag.Bool("play", false, "enable playground in web interface")
 	showExamples      = flag.Bool("ex", false, "show examples in command line mode")
 	declLinks         = flag.Bool("links", true, "link identifiers to their declarations")
@@ -173,14 +173,18 @@ func ghURLFunc(info *godoc.PageInfo, n interface{}) string {
 func readTemplate(name, data string) *template.Template {
 	// be explicit with errors (for app engine use)
 	t, err := template.New(name).Funcs(pres.FuncMap()).Funcs(funcs).Parse(string(data))
-	if err != nil {
-		log.Fatal("readTemplate: ", err)
-	}
+	Must(err)
 	return t
 }
 
-func readTemplates(p *godoc.Presentation, html bool) {
-	p.PackageText = readTemplate("package.txt", pkgTemplate)
+func readTemplates(p *godoc.Presentation, templatePath string, html bool) {
+	data := pkgTemplate
+	if templatePath != "" {
+		buf, err := ioutil.ReadFile(templatePath)
+		Must(err)
+		data = string(buf)
+	}
+	p.PackageText = readTemplate("package.txt", data)
 }
 
 func main() {
@@ -221,7 +225,7 @@ func main() {
 		"list_imports": listImportsFunc,
 	}
 
-	readTemplates(pres, false)
+	readTemplates(pres, *templatePath, false)
 
 	var buf bytes.Buffer
 	if err := godoc.CommandLine(&buf, fs, pres, flag.Args()); err != nil {
