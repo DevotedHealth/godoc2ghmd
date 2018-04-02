@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// nolint: gocyclo
 func fmtProtobufDoc(doc string) string {
 	prelude := ""
 	didProtoFiles := false
@@ -19,7 +20,7 @@ func fmtProtobufDoc(doc string) string {
 		trimmed := strings.TrimSpace(line)
 
 		if !didProtoFiles && strings.Contains(line, *protobufPreludeMatcher) {
-			trimmed := strings.Replace(trimmed, "protocol buffer", "[Protobuf](https://developers.google.com/protocol-buffers/)-compatible", 1)
+			trimmed = strings.Replace(trimmed, "protocol buffer", "[Protobuf](https://developers.google.com/protocol-buffers/)-compatible", 1)
 			protoFiles += "**" + trimmed + "**\n\n"
 			continue
 		}

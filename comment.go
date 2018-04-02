@@ -23,7 +23,8 @@ var (
 // Escape comment text for HTML. If nice is set,
 // also turn `` into &ldquo; and '' into &rdquo;.
 func commentEscape(w io.Writer, text string, nice bool) {
-	w.Write([]byte(text))
+	_, err := w.Write([]byte(text))
+	Must(err)
 	return
 }
 
@@ -43,24 +44,24 @@ const (
 var matchRx = regexp.MustCompile(`(` + urlRx + `)|(` + identRx + `)`)
 
 var (
-	html_a      = []byte(`<a href="`)
-	html_aq     = []byte(`">`)
-	html_enda   = []byte("</a>")
-	html_i      = []byte("<i>")
-	html_endi   = []byte("</i>")
-	html_p      = []byte("\n")
-	html_endp   = []byte("\n")
-	html_pre    = []byte("<pre>")
-	html_endpre = []byte("</pre>\n")
-	html_h      = []byte(`<h3 id="`)
-	html_hq     = []byte(`">`)
-	html_endh   = []byte("</h3>\n")
+	htmlA      = []byte(`<a href="`)
+	htmlAq     = []byte(`">`)
+	htmlEndA   = []byte("</a>")
+	htmlI      = []byte("<i>")
+	htmlEndI   = []byte("</i>")
+	htmlP      = []byte("\n")
+	htmlEndP   = []byte("\n")
+	htmlPre    = []byte("<pre>")
+	htmlEndPre = []byte("</pre>\n")
+	htmlH      = []byte(`<h3 id="`)
+	htmlHq     = []byte(`">`)
+	htmlEndH   = []byte("</h3>\n")
 
-	md_pre     = []byte("\t")
-	md_newline = []byte("\n")
-	md_h1      = []byte("# ")
-	md_h2      = []byte("## ")
-	md_h3      = []byte("### ")
+	mdPre     = []byte("\t")
+	mdNewline = []byte("\n")
+	mdH1      = []byte("# ")
+	mdH2      = []byte("## ")
+	mdH3      = []byte("### ")
 )
 
 // Emphasize and escape a line of text for HTML. URLs are converted into links;
@@ -100,19 +101,19 @@ func emphasize(w io.Writer, line string, words map[string]string, nice bool) {
 
 		// write match
 		if len(url) > 0 {
-			w.Write(html_a)
+			w.Write(htmlA)
 			template.HTMLEscape(w, []byte(url))
-			w.Write(html_aq)
+			w.Write(htmlAq)
 		}
 		if italics {
-			w.Write(html_i)
+			w.Write(htmlI)
 		}
 		commentEscape(w, match, nice)
 		if italics {
-			w.Write(html_endi)
+			w.Write(htmlEndI)
 		}
 		if len(url) > 0 {
-			w.Write(html_enda)
+			w.Write(htmlEndA)
 		}
 
 		// advance
@@ -165,6 +166,7 @@ func unindent(block []string) {
 
 // heading returns the trimmed line if it passes as a section heading;
 // otherwise it returns the empty string.
+// nolint: gocyclo
 func heading(line string) string {
 	line = strings.TrimSpace(line)
 	if len(line) == 0 {
@@ -252,9 +254,9 @@ func ToMD(w io.Writer, text string, words map[string]string) {
 			for _, line := range b.lines {
 				emphasize(w, line, words, true)
 			}
-			w.Write(md_newline) // trailing newline to emulate </p>
+			w.Write(mdNewline) // trailing newline to emulate </p>
 		case opHead:
-			w.Write(md_h3)
+			w.Write(mdH3)
 			id := ""
 			for _, line := range b.lines {
 				if id == "" {
@@ -262,18 +264,19 @@ func ToMD(w io.Writer, text string, words map[string]string) {
 				}
 				commentEscape(w, line, true)
 			}
-			w.Write(md_newline)
+			w.Write(mdNewline)
 		case opPre:
-			w.Write(md_newline)
+			w.Write(mdNewline)
 			for _, line := range b.lines {
-				w.Write(md_pre)
+				w.Write(mdPre)
 				emphasize(w, line, nil, false)
 			}
-			w.Write(md_newline)
+			w.Write(mdNewline)
 		}
 	}
 }
 
+// nolint: gocyclo
 func blocks(text string) []block {
 	var (
 		out  []block
