@@ -2,7 +2,9 @@ package main
 
 var pkgTemplate = `{{with .PDoc}}
 {{if $.IsMain}}
-> {{ base .ImportPath }}
+# {{ base .ImportPath }}
+
+{{ base .ImportPath }} is a main package.
 {{comment_md .Doc}}
 {{else}}
 # {{ .Name }}
@@ -11,7 +13,8 @@ var pkgTemplate = `{{with .PDoc}}
 * [Overview](#pkg-overview)
 * [Imported Packages](#pkg-imports)
 * [Index](#pkg-index){{if $.Examples}}
-* [Examples](#pkg-examples){{- end}}
+* [Examples](#pkg-examples){{- end}}{{if $.Dirs}}
+* [Subdirectories](#subdirectories){{- end}}
 
 ## <a name="pkg-overview">Overview</a>
 {{pkgdoc_md .Doc}}
@@ -85,5 +88,14 @@ var pkgTemplate = `{{with .PDoc}}
 </ul>
 {{end}}
 {{end}}
+
+{{end}}{{/* End of IsMain if statement */}}
+
+{{if .Dirs}}
+## <a name="Subdirectories">Subdirectories</a>
+{{range $.Dirs.List}}
+{{indent .Depth}}* [{{.Name | html}}]({{print "./" .Path}}){{if .Synopsis}} {{ .Synopsis}}{{end -}}
 {{end}}
+{{end}}
+
 `
