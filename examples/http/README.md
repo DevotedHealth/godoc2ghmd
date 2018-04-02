@@ -7,6 +7,7 @@ use 'godoc cmd/net/http' for documentation on the net/http command
 * [Imported Packages](#pkg-imports)
 * [Index](#pkg-index)
 * [Examples](#pkg-examples)
+* [Subdirectories](#subdirectories)
 
 ## <a name="pkg-overview">Overview</a>
 Package http provides HTTP client and server implementations.
@@ -50,7 +51,8 @@ For control over proxies, TLS configuration, keep-alives,
 compression, and other settings, create a Transport:
 
 	tr := &http.Transport{
-		TLSClientConfig:    &tls.Config{RootCAs: pool},
+		MaxIdleConns:       10,
+		IdleConnTimeout:    30 * time.Second,
 		DisableCompression: true,
 	}
 	client := &http.Client{Transport: tr}
@@ -83,25 +85,37 @@ custom Server:
 	}
 	log.Fatal(s.ListenAndServe())
 
-The http package has transparent support for the HTTP/2 protocol when
-using HTTPS. Programs that must disable HTTP/2 can do so by setting
-Transport.TLSNextProto (for clients) or Server.TLSNextProto (for
-servers) to a non-nil, empty map. Alternatively, the following GODEBUG
-environment variables are currently supported:
+Starting with Go 1.6, the http package has transparent support for the
+HTTP/2 protocol when using HTTPS. Programs that must disable HTTP/2
+can do so by setting Transport.TLSNextProto (for clients) or
+Server.TLSNextProto (for servers) to a non-nil, empty
+map. Alternatively, the following GODEBUG environment variables are
+currently supported:
 
 	GODEBUG=http2client=0  # disable HTTP/2 client support
 	GODEBUG=http2server=0  # disable HTTP/2 server support
 	GODEBUG=http2debug=1   # enable verbose HTTP/2 debug logs
 	GODEBUG=http2debug=2   # ... even more verbose, with frame dumps
 
-The GODEBUG variables are not covered by Go's API compatibility promise.
-HTTP/2 support was added in Go 1.6. Please report any issues instead of
-disabling HTTP/2 support: <a href="https://golang.org/s/http2bug">https://golang.org/s/http2bug</a>
+The GODEBUG variables are not covered by Go's API compatibility
+promise. Please report any issues before disabling HTTP/2
+support: <a href="https://golang.org/s/http2bug">https://golang.org/s/http2bug</a>
+
+The http package's Transport and Server both automatically enable
+HTTP/2 support for simple configurations. To enable HTTP/2 for more
+complex configurations, to use lower-level HTTP/2 features, or to use
+a newer version of Go's http2 package, import "golang.org/x/net/http2"
+directly and use its ConfigureTransport and/or ConfigureServer
+functions. Manually configuring HTTP/2 via the golang.org/x/net/http2
+package takes precedence over the net/http package's built-in HTTP/2
+support.
 
 ## <a name="pkg-imports">Imported Packages</a>
 
 - golang_org/x/net/http2/hpack
+- golang_org/x/net/idna
 - golang_org/x/net/lex/httplex
+- golang_org/x/net/proxy
 
 ## <a name="pkg-index">Index</a>
 * [Constants](#pkg-constants)
@@ -119,17 +133,18 @@ disabling HTTP/2 support: <a href="https://golang.org/s/http2bug">https://golang
 * [func ParseTime(text string) (t time.Time, err error)](#ParseTime)
 * [func ProxyFromEnvironment(req \*Request) (\*url.URL, error)](#ProxyFromEnvironment)
 * [func ProxyURL(fixedURL \*url.URL) func(\*Request) (\*url.URL, error)](#ProxyURL)
-* [func Redirect(w ResponseWriter, r \*Request, urlStr string, code int)](#Redirect)
+* [func Redirect(w ResponseWriter, r \*Request, url string, code int)](#Redirect)
 * [func Serve(l net.Listener, handler Handler) error](#Serve)
 * [func ServeContent(w ResponseWriter, req \*Request, name string, modtime time.Time, content io.ReadSeeker)](#ServeContent)
 * [func ServeFile(w ResponseWriter, r \*Request, name string)](#ServeFile)
+* [func ServeTLS(l net.Listener, handler Handler, certFile, keyFile string) error](#ServeTLS)
 * [func SetCookie(w ResponseWriter, cookie \*Cookie)](#SetCookie)
 * [func StatusText(code int) string](#StatusText)
 * [type Client](#Client)
   * [func (c \*Client) Do(req \*Request) (\*Response, error)](#Client.Do)
   * [func (c \*Client) Get(url string) (resp \*Response, err error)](#Client.Get)
   * [func (c \*Client) Head(url string) (resp \*Response, err error)](#Client.Head)
-  * [func (c \*Client) Post(url string, bodyType string, body io.Reader) (resp \*Response, err error)](#Client.Post)
+  * [func (c \*Client) Post(url string, contentType string, body io.Reader) (resp \*Response, err error)](#Client.Post)
   * [func (c \*Client) PostForm(url string, data url.Values) (resp \*Response, err error)](#Client.PostForm)
 * [type CloseNotifier](#CloseNotifier)
 * [type ConnState](#ConnState)
@@ -159,9 +174,11 @@ disabling HTTP/2 support: <a href="https://golang.org/s/http2bug">https://golang
   * [func (h Header) WriteSubset(w io.Writer, exclude map[string]bool) error](#Header.WriteSubset)
 * [type Hijacker](#Hijacker)
 * [type ProtocolError](#ProtocolError)
-  * [func (err \*ProtocolError) Error() string](#ProtocolError.Error)
+  * [func (pe \*ProtocolError) Error() string](#ProtocolError.Error)
+* [type PushOptions](#PushOptions)
+* [type Pusher](#Pusher)
 * [type Request](#Request)
-  * [func NewRequest(method, urlStr string, body io.Reader) (\*Request, error)](#NewRequest)
+  * [func NewRequest(method, url string, body io.Reader) (\*Request, error)](#NewRequest)
   * [func ReadRequest(b \*bufio.Reader) (\*Request, error)](#ReadRequest)
   * [func (r \*Request) AddCookie(c \*Cookie)](#Request.AddCookie)
   * [func (r \*Request) BasicAuth() (username, password string, ok bool)](#Request.BasicAuth)
@@ -184,7 +201,7 @@ disabling HTTP/2 support: <a href="https://golang.org/s/http2bug">https://golang
 * [type Response](#Response)
   * [func Get(url string) (resp \*Response, err error)](#Get)
   * [func Head(url string) (resp \*Response, err error)](#Head)
-  * [func Post(url string, bodyType string, body io.Reader) (resp \*Response, err error)](#Post)
+  * [func Post(url string, contentType string, body io.Reader) (resp \*Response, err error)](#Post)
   * [func PostForm(url string, data url.Values) (resp \*Response, err error)](#PostForm)
   * [func ReadResponse(r \*bufio.Reader, req \*Request) (\*Response, error)](#ReadResponse)
   * [func (r \*Response) Cookies() []\*Cookie](#Response.Cookies)
@@ -201,10 +218,14 @@ disabling HTTP/2 support: <a href="https://golang.org/s/http2bug">https://golang
   * [func (mux \*ServeMux) Handler(r \*Request) (h Handler, pattern string)](#ServeMux.Handler)
   * [func (mux \*ServeMux) ServeHTTP(w ResponseWriter, r \*Request)](#ServeMux.ServeHTTP)
 * [type Server](#Server)
+  * [func (srv \*Server) Close() error](#Server.Close)
   * [func (srv \*Server) ListenAndServe() error](#Server.ListenAndServe)
   * [func (srv \*Server) ListenAndServeTLS(certFile, keyFile string) error](#Server.ListenAndServeTLS)
+  * [func (srv \*Server) RegisterOnShutdown(f func())](#Server.RegisterOnShutdown)
   * [func (srv \*Server) Serve(l net.Listener) error](#Server.Serve)
+  * [func (srv \*Server) ServeTLS(l net.Listener, certFile, keyFile string) error](#Server.ServeTLS)
   * [func (srv \*Server) SetKeepAlivesEnabled(v bool)](#Server.SetKeepAlivesEnabled)
+  * [func (srv \*Server) Shutdown(ctx context.Context) error](#Server.Shutdown)
 * [type Transport](#Transport)
   * [func (t \*Transport) CancelRequest(req \*Request)](#Transport.CancelRequest)
   * [func (t \*Transport) CloseIdleConnections()](#Transport.CloseIdleConnections)
@@ -218,6 +239,7 @@ disabling HTTP/2 support: <a href="https://golang.org/s/http2bug">https://golang
 * [Hijacker](#example_Hijacker)
 * [ResponseWriter (Trailers)](#example_ResponseWriter_trailers)
 * [ServeMux.Handle](#example_ServeMux_Handle)
+* [Server.Shutdown](#example_Server_Shutdown)
 * [StripPrefix](#example_StripPrefix)
 
 #### <a name="pkg-files">Package files</a>
@@ -336,16 +358,49 @@ generate the correct format.
 
 For parsing this time format, see ParseTime.
 
+``` go
+const TrailerPrefix = "Trailer:"
+```
+TrailerPrefix is a magic prefix for ResponseWriter.Header map keys
+that, if present, signals that the map entry is actually for
+the response trailers, and not the response headers. The prefix
+is stripped after the ServeHTTP call finishes and the values are
+sent in the trailers.
+
+This mechanism is intended only for trailers that are not known
+prior to the headers being written. If the set of trailers is fixed
+or known before the header is written, the normal Go trailers mechanism
+is preferred:
+
+	<a href="https://golang.org/pkg/net/http/#ResponseWriter">https://golang.org/pkg/net/http/#ResponseWriter</a>
+	<a href="https://golang.org/pkg/net/http/#example_ResponseWriter_trailers">https://golang.org/pkg/net/http/#example_ResponseWriter_trailers</a>
+
 ## <a name="pkg-variables">Variables</a>
 ``` go
 var (
-    ErrHeaderTooLong        = &ProtocolError{"header too long"}
-    ErrShortBody            = &ProtocolError{"entity body too short"}
-    ErrNotSupported         = &ProtocolError{"feature not supported"}
-    ErrUnexpectedTrailer    = &ProtocolError{"trailer header without chunked transfer encoding"}
+    // ErrNotSupported is returned by the Push method of Pusher
+    // implementations to indicate that HTTP/2 Push support is not
+    // available.
+    ErrNotSupported = &ProtocolError{"feature not supported"}
+
+    // ErrUnexpectedTrailer is returned by the Transport when a server
+    // replies with a Trailer header, but without a chunked reply.
+    ErrUnexpectedTrailer = &ProtocolError{"trailer header without chunked transfer encoding"}
+
+    // ErrMissingBoundary is returned by Request.MultipartReader when the
+    // request's Content-Type does not include a "boundary" parameter.
+    ErrMissingBoundary = &ProtocolError{"no multipart boundary param in Content-Type"}
+
+    // ErrNotMultipart is returned by Request.MultipartReader when the
+    // request's Content-Type is not multipart/form-data.
+    ErrNotMultipart = &ProtocolError{"request Content-Type isn't multipart/form-data"}
+
+    // Deprecated: ErrHeaderTooLong is not used.
+    ErrHeaderTooLong = &ProtocolError{"header too long"}
+    // Deprecated: ErrShortBody is not used.
+    ErrShortBody = &ProtocolError{"entity body too short"}
+    // Deprecated: ErrMissingContentLength is not used.
     ErrMissingContentLength = &ProtocolError{"missing ContentLength in HEAD response"}
-    ErrNotMultipart         = &ProtocolError{"request Content-Type isn't multipart/form-data"}
-    ErrMissingBoundary      = &ProtocolError{"no multipart boundary param in Content-Type"}
 )
 ```
 ``` go
@@ -357,7 +412,9 @@ var (
 
     // ErrHijacked is returned by ResponseWriter.Write calls when
     // the underlying connection has been hijacked using the
-    // Hijacker interfaced.
+    // Hijacker interface. A zero-byte write on a hijacked
+    // connection will return ErrHijacked without any other side
+    // effects.
     ErrHijacked = errors.New("http: connection has been hijacked")
 
     // ErrContentLength is returned by ResponseWriter.Write calls
@@ -398,6 +455,14 @@ var DefaultServeMux = &defaultServeMux
 DefaultServeMux is the default ServeMux used by Serve.
 
 ``` go
+var ErrAbortHandler = errors.New("net/http: abort Handler")
+```
+ErrAbortHandler is a sentinel panic value to abort a handler.
+While any panic from ServeHTTP aborts the response to the client,
+panicking with ErrAbortHandler also suppresses logging of a stack
+trace to the server's error log.
+
+``` go
 var ErrBodyReadAfterClose = errors.New("http: invalid Read on closed Body")
 ```
 ErrBodyReadAfterClose is returned when reading a Request or Response
@@ -435,6 +500,12 @@ ErrNoLocation is returned by Response's Location method
 when no Location header is present.
 
 ``` go
+var ErrServerClosed = errors.New("http: Server closed")
+```
+ErrServerClosed is returned by the Server's Serve, ServeTLS, ListenAndServe,
+and ListenAndServeTLS methods after a call to Shutdown or Close.
+
+``` go
 var ErrSkipAltProtocol = errors.New("net/http: skip alternate protocol")
 ```
 ErrSkipAltProtocol is a sentinel error value defined by Transport.RegisterProtocol.
@@ -447,7 +518,15 @@ control how redirects are processed. If returned, the next request
 is not sent and the most recent response is returned with its body
 unclosed.
 
-## <a name="CanonicalHeaderKey">func</a> [CanonicalHeaderKey](./header.go#L173)
+``` go
+var NoBody = noBody{}
+```
+NoBody is an io.ReadCloser with no bytes. Read always returns EOF
+and Close always returns nil. It can be used in an outgoing client
+request to explicitly signal that a request has zero bytes.
+An alternative, however, is to simply set Request.Body to nil.
+
+## <a name="CanonicalHeaderKey">func</a> [CanonicalHeaderKey](./header.go#L176)
 ``` go
 func CanonicalHeaderKey(s string) string
 ```
@@ -470,7 +549,7 @@ first 512 bytes of data. DetectContentType always returns
 a valid MIME type: if it cannot determine a more specific one, it
 returns "application/octet-stream".
 
-## <a name="Error">func</a> [Error](./server.go#L1735)
+## <a name="Error">func</a> [Error](./server.go#L1956)
 ``` go
 func Error(w ResponseWriter, error string, code int)
 ```
@@ -479,7 +558,7 @@ It does not otherwise end the request; the caller should ensure no further
 writes are done to w.
 The error message should be plain text.
 
-## <a name="Handle">func</a> [Handle](./server.go#L2076)
+## <a name="Handle">func</a> [Handle](./server.go#L2374)
 ``` go
 func Handle(pattern string, handler Handler)
 ```
@@ -487,7 +566,7 @@ Handle registers the handler for the given pattern
 in the DefaultServeMux.
 The documentation for ServeMux explains how patterns are matched.
 
-## <a name="HandleFunc">func</a> [HandleFunc](./server.go#L2081)
+## <a name="HandleFunc">func</a> [HandleFunc](./server.go#L2379)
 ``` go
 func HandleFunc(pattern string, handler func(ResponseWriter, *Request))
 ```
@@ -495,7 +574,7 @@ HandleFunc registers the handler function for the given pattern
 in the DefaultServeMux.
 The documentation for ServeMux explains how patterns are matched.
 
-## <a name="ListenAndServe">func</a> [ListenAndServe](./server.go#L2349)
+## <a name="ListenAndServe">func</a> [ListenAndServe](./server.go#L2967)
 ``` go
 func ListenAndServe(addr string, handler Handler) error
 ```
@@ -528,7 +607,7 @@ A trivial example server is:
 
 ListenAndServe always returns a non-nil error.
 
-## <a name="ListenAndServeTLS">func</a> [ListenAndServeTLS](./server.go#L2382)
+## <a name="ListenAndServeTLS">func</a> [ListenAndServeTLS](./server.go#L3000)
 ``` go
 func ListenAndServeTLS(addr, certFile, keyFile string, handler Handler) error
 ```
@@ -561,7 +640,7 @@ One can use generate_cert.go in crypto/tls to generate cert.pem and key.pem.
 
 ListenAndServeTLS always returns a non-nil error.
 
-## <a name="MaxBytesReader">func</a> [MaxBytesReader](./request.go#L888)
+## <a name="MaxBytesReader">func</a> [MaxBytesReader](./request.go#L1027)
 ``` go
 func MaxBytesReader(w ResponseWriter, r io.ReadCloser, n int64) io.ReadCloser
 ```
@@ -574,20 +653,20 @@ underlying reader when its Close method is called.
 MaxBytesReader prevents clients from accidentally or maliciously
 sending a large request and wasting server resources.
 
-## <a name="NotFound">func</a> [NotFound](./server.go#L1743)
+## <a name="NotFound">func</a> [NotFound](./server.go#L1964)
 ``` go
 func NotFound(w ResponseWriter, r *Request)
 ```
 NotFound replies to the request with an HTTP 404 not found error.
 
-## <a name="ParseHTTPVersion">func</a> [ParseHTTPVersion](./request.go#L611)
+## <a name="ParseHTTPVersion">func</a> [ParseHTTPVersion](./request.go#L708)
 ``` go
 func ParseHTTPVersion(vers string) (major, minor int, ok bool)
 ```
 ParseHTTPVersion parses a HTTP version string.
 "HTTP/1.0" returns (1, 0, true).
 
-## <a name="ParseTime">func</a> [ParseTime](./header.go#L79)
+## <a name="ParseTime">func</a> [ParseTime](./header.go#L81)
 ``` go
 func ParseTime(text string) (t time.Time, err error)
 ```
@@ -595,7 +674,7 @@ ParseTime parses a time header (such as the Date: header),
 trying each of the three formats allowed by HTTP/1.1:
 TimeFormat, time.RFC850, and time.ANSIC.
 
-## <a name="ProxyFromEnvironment">func</a> [ProxyFromEnvironment](./transport.go#L247)
+## <a name="ProxyFromEnvironment">func</a> [ProxyFromEnvironment](./transport.go#L275)
 ``` go
 func ProxyFromEnvironment(req *Request) (*url.URL, error)
 ```
@@ -616,16 +695,16 @@ as defined by NO_PROXY.
 As a special case, if req.URL.Host is "localhost" (with or without
 a port number), then a nil URL and nil error will be returned.
 
-## <a name="ProxyURL">func</a> [ProxyURL](./transport.go#L281)
+## <a name="ProxyURL">func</a> [ProxyURL](./transport.go#L313)
 ``` go
 func ProxyURL(fixedURL *url.URL) func(*Request) (*url.URL, error)
 ```
 ProxyURL returns a proxy function (for use in a Transport)
 that always returns the same URL.
 
-## <a name="Redirect">func</a> [Redirect](./server.go#L1773)
+## <a name="Redirect">func</a> [Redirect](./server.go#L1998)
 ``` go
-func Redirect(w ResponseWriter, r *Request, urlStr string, code int)
+func Redirect(w ResponseWriter, r *Request, url string, code int)
 ```
 Redirect replies to the request with a redirect to url,
 which may be a path relative to the request path.
@@ -633,7 +712,7 @@ which may be a path relative to the request path.
 The provided code should be in the 3xx range and is usually
 StatusMovedPermanently, StatusFound or StatusSeeOther.
 
-## <a name="Serve">func</a> [Serve](./server.go#L2089)
+## <a name="Serve">func</a> [Serve](./server.go#L2387)
 ``` go
 func Serve(l net.Listener, handler Handler) error
 ```
@@ -642,14 +721,15 @@ creating a new service goroutine for each. The service goroutines
 read requests and then call handler to reply to them.
 Handler is typically nil, in which case the DefaultServeMux is used.
 
-## <a name="ServeContent">func</a> [ServeContent](./fs.go#L122)
+## <a name="ServeContent">func</a> [ServeContent](./fs.go#L151)
 ``` go
 func ServeContent(w ResponseWriter, req *Request, name string, modtime time.Time, content io.ReadSeeker)
 ```
 ServeContent replies to the request using the content in the
 provided ReadSeeker. The main benefit of ServeContent over io.Copy
 is that it handles Range requests properly, sets the MIME type, and
-handles If-Modified-Since requests.
+handles If-Match, If-Unmodified-Since, If-None-Match, If-Modified-Since,
+and If-Range requests.
 
 If the response's Content-Type header is not set, ServeContent
 first tries to deduce the type from name's file extension and,
@@ -666,12 +746,12 @@ modtime to decide whether the content needs to be sent at all.
 The content's Seek method must work: ServeContent uses
 a seek to the end of the content to determine its size.
 
-If the caller has set w's ETag header, ServeContent uses it to
-handle requests using If-Range and If-None-Match.
+If the caller has set w's ETag header formatted per RFC 7232, section 2.3,
+ServeContent uses it to handle requests using If-Match, If-None-Match, or If-Range.
 
 Note that *os.File implements the io.ReadSeeker interface.
 
-## <a name="ServeFile">func</a> [ServeFile](./fs.go#L473)
+## <a name="ServeFile">func</a> [ServeFile](./fs.go#L662)
 ``` go
 func ServeFile(w ResponseWriter, r *Request, name string)
 ```
@@ -689,7 +769,22 @@ ends in "/index.html" to the same path, without the final
 "index.html". To avoid such redirects either modify the path or
 use ServeContent.
 
-## <a name="SetCookie">func</a> [SetCookie](./cookie.go#L130)
+## <a name="ServeTLS">func</a> [ServeTLS](./server.go#L2402)
+``` go
+func ServeTLS(l net.Listener, handler Handler, certFile, keyFile string) error
+```
+ServeTLS accepts incoming HTTPS connections on the listener l,
+creating a new service goroutine for each. The service goroutines
+read requests and then call handler to reply to them.
+
+Handler is typically nil, in which case the DefaultServeMux is used.
+
+Additionally, files containing a certificate and matching private key
+for the server must be provided. If the certificate is signed by a
+certificate authority, the certFile should be the concatenation
+of the server's certificate, any intermediates, and the CA's certificate.
+
+## <a name="SetCookie">func</a> [SetCookie](./cookie.go#L132)
 ``` go
 func SetCookie(w ResponseWriter, cookie *Cookie)
 ```
@@ -704,7 +799,7 @@ func StatusText(code int) string
 StatusText returns a text for the HTTP status code. It returns the empty
 string if the code is unknown.
 
-## <a name="Client">type</a> [Client](./client.go#L36-L81)
+## <a name="Client">type</a> [Client](./client.go#L56-L107)
 ``` go
 type Client struct {
     // Transport specifies the mechanism by which individual
@@ -729,8 +824,14 @@ type Client struct {
     CheckRedirect func(req *Request, via []*Request) error
 
     // Jar specifies the cookie jar.
-    // If Jar is nil, cookies are not sent in requests and ignored
-    // in responses.
+    //
+    // The Jar is used to insert relevant cookies into every
+    // outbound Request and is updated with the cookie values
+    // of every inbound Response. The Jar is consulted for every
+    // redirect that the Client follows.
+    //
+    // If Jar is nil, cookies are only sent if they are explicitly
+    // set on the Request.
     Jar CookieJar
 
     // Timeout specifies a time limit for requests made by this
@@ -764,7 +865,25 @@ A Client is higher-level than a RoundTripper (such as Transport)
 and additionally handles HTTP details such as cookies and
 redirects.
 
-### <a name="Client.Do">func</a> (\*Client) [Do](./client.go#L181)
+When following redirects, the Client will forward all headers set on the
+initial Request except:
+
+• when forwarding sensitive headers like "Authorization",
+"WWW-Authenticate", and "Cookie" to untrusted targets.
+These headers will be ignored when following a redirect to a domain
+that is not a subdomain match or exact match of the initial domain.
+For example, a redirect from "foo.com" to either "foo.com" or "sub.foo.com"
+will forward the sensitive headers, but a redirect to "bar.com" will not.
+
+• when forwarding the "Cookie" header with a non-nil cookie Jar.
+Since each redirect may mutate the state of the cookie jar,
+a redirect may possibly alter a cookie set in the initial request.
+When forwarding the "Cookie" header, any mutated cookies will be omitted,
+with the expectation that the Jar will insert those mutated cookies
+with the updated values (assuming the origin matches).
+If Jar is nil, the initial cookies are forwarded without change.
+
+### <a name="Client.Do">func</a> (\*Client) [Do](./client.go#L493)
 ``` go
 func (c *Client) Do(req *Request) (*Response, error)
 ```
@@ -792,7 +911,17 @@ the returned Response.Body is already closed.
 
 Generally Get, Post, or PostForm will be used instead of Do.
 
-### <a name="Client.Get">func</a> (\*Client) [Get](./client.go#L413)
+If the server replies with a redirect, the Client first uses the
+CheckRedirect function to determine whether the redirect should be
+followed. If permitted, a 301, 302, or 303 redirect causes
+subsequent requests to use HTTP method GET
+(or HEAD if the original request was HEAD), with no body.
+A 307 or 308 redirect preserves the original HTTP method and body,
+provided that the Request.GetBody function is defined.
+The NewRequest function automatically sets GetBody for common
+standard library body types.
+
+### <a name="Client.Get">func</a> (\*Client) [Get](./client.go#L391)
 ``` go
 func (c *Client) Get(url string) (resp *Response, err error)
 ```
@@ -804,6 +933,7 @@ Client's CheckRedirect function:
 	302 (Found)
 	303 (See Other)
 	307 (Temporary Redirect)
+	308 (Permanent Redirect)
 
 An error is returned if the Client's CheckRedirect function fails
 or if there was an HTTP protocol error. A non-2xx response doesn't
@@ -814,11 +944,11 @@ Caller should close resp.Body when done reading from it.
 
 To make a request with custom headers, use NewRequest and Client.Do.
 
-### <a name="Client.Head">func</a> (\*Client) [Head](./client.go#L630)
+### <a name="Client.Head">func</a> (\*Client) [Head](./client.go#L801)
 ``` go
 func (c *Client) Head(url string) (resp *Response, err error)
 ```
-Head issues a HEAD to the specified URL.  If the response is one of the
+Head issues a HEAD to the specified URL. If the response is one of the
 following redirect codes, Head follows the redirect after calling the
 Client's CheckRedirect function:
 
@@ -826,10 +956,11 @@ Client's CheckRedirect function:
 	302 (Found)
 	303 (See Other)
 	307 (Temporary Redirect)
+	308 (Permanent Redirect)
 
-### <a name="Client.Post">func</a> (\*Client) [Post](./client.go#L573)
+### <a name="Client.Post">func</a> (\*Client) [Post](./client.go#L736)
 ``` go
-func (c *Client) Post(url string, bodyType string, body io.Reader) (resp *Response, err error)
+func (c *Client) Post(url string, contentType string, body io.Reader) (resp *Response, err error)
 ```
 Post issues a POST to the specified URL.
 
@@ -840,7 +971,10 @@ request.
 
 To set custom headers, use NewRequest and Client.Do.
 
-### <a name="Client.PostForm">func</a> (\*Client) [PostForm](./client.go#L604)
+See the Client.Do method documentation for details on how redirects
+are handled.
+
+### <a name="Client.PostForm">func</a> (\*Client) [PostForm](./client.go#L773)
 ``` go
 func (c *Client) PostForm(url string, data url.Values) (resp *Response, err error)
 ```
@@ -848,12 +982,15 @@ PostForm issues a POST to the specified URL,
 with data's keys and values URL-encoded as the request body.
 
 The Content-Type header is set to application/x-www-form-urlencoded.
-To set other headers, use NewRequest and DefaultClient.Do.
+To set other headers, use NewRequest and Client.Do.
 
 When err is nil, resp always contains a non-nil resp.Body.
 Caller should close resp.Body when done reading from it.
 
-## <a name="CloseNotifier">type</a> [CloseNotifier](./server.go#L167-L187)
+See the Client.Do method documentation for details on how redirects
+are handled.
+
+## <a name="CloseNotifier">type</a> [CloseNotifier](./server.go#L200-L220)
 ``` go
 type CloseNotifier interface {
     // CloseNotify returns a channel that receives at most a
@@ -883,7 +1020,7 @@ allow detecting when the underlying connection has gone away.
 This mechanism can be used to cancel long operations on the server
 if the client has disconnected before the response is ready.
 
-## <a name="ConnState">type</a> [ConnState](./server.go#L2138)
+## <a name="ConnState">type</a> [ConnState](./server.go#L2630)
 ``` go
 type ConnState int
 ```
@@ -928,12 +1065,12 @@ const (
 )
 ```
 
-### <a name="ConnState.String">func</a> (ConnState) [String](./server.go#L2184)
+### <a name="ConnState.String">func</a> (ConnState) [String](./server.go#L2676)
 ``` go
 func (c ConnState) String() string
 ```
 
-## <a name="Cookie">type</a> [Cookie](./cookie.go#L21-L38)
+## <a name="Cookie">type</a> [Cookie](./cookie.go#L20-L37)
 ``` go
 type Cookie struct {
     Name  string
@@ -959,7 +1096,7 @@ HTTP response or the Cookie header of an HTTP request.
 
 See <a href="http://tools.ietf.org/html/rfc6265">http://tools.ietf.org/html/rfc6265</a> for details.
 
-### <a name="Cookie.String">func</a> (\*Cookie) [String](./cookie.go#L140)
+### <a name="Cookie.String">func</a> (\*Cookie) [String](./cookie.go#L142)
 ``` go
 func (c *Cookie) String() string
 ```
@@ -989,7 +1126,7 @@ goroutines.
 
 The net/http/cookiejar package provides a CookieJar implementation.
 
-## <a name="Dir">type</a> [Dir](./fs.go#L34)
+## <a name="Dir">type</a> [Dir](./fs.go#L40)
 ``` go
 type Dir string
 ```
@@ -1000,14 +1137,20 @@ While the FileSystem.Open method takes '/'-separated paths, a Dir's string
 value is a filename on the native file system, not a URL, so it is separated
 by filepath.Separator, which isn't necessarily '/'.
 
+Note that Dir will allow access to files and directories starting with a
+period, which could expose sensitive directories like a .git directory or
+sensitive files like .htpasswd. To exclude files with a leading period,
+remove the files/directories from the server or create a custom FileSystem
+implementation.
+
 An empty Dir is treated as ".".
 
-### <a name="Dir.Open">func</a> (Dir) [Open](./fs.go#L36)
+### <a name="Dir.Open">func</a> (Dir) [Open](./fs.go#L66)
 ``` go
 func (d Dir) Open(name string) (File, error)
 ```
 
-## <a name="File">type</a> [File](./fs.go#L63-L69)
+## <a name="File">type</a> [File](./fs.go#L93-L99)
 ``` go
 type File interface {
     io.Closer
@@ -1022,7 +1165,7 @@ served by the FileServer implementation.
 
 The methods should behave the same as those on an *os.File.
 
-## <a name="FileSystem">type</a> [FileSystem](./fs.go#L55-L57)
+## <a name="FileSystem">type</a> [FileSystem](./fs.go#L85-L87)
 ``` go
 type FileSystem interface {
     Open(name string) (File, error)
@@ -1032,7 +1175,7 @@ A FileSystem implements access to a collection of named files.
 The elements in a file path are separated by slash ('/', U+002F)
 characters, regardless of host operating system convention.
 
-## <a name="Flusher">type</a> [Flusher](./server.go#L135-L138)
+## <a name="Flusher">type</a> [Flusher](./server.go#L162-L165)
 ``` go
 type Flusher interface {
     // Flush sends any buffered data to the client.
@@ -1051,7 +1194,7 @@ if the client is connected through an HTTP proxy,
 the buffered data may not reach the client until the response
 completes.
 
-## <a name="Handler">type</a> [Handler](./server.go#L77-L79)
+## <a name="Handler">type</a> [Handler](./server.go#L82-L84)
 ``` go
 type Handler interface {
     ServeHTTP(ResponseWriter, *Request)
@@ -1077,9 +1220,12 @@ provided Request.
 If ServeHTTP panics, the server (the caller of ServeHTTP) assumes
 that the effect of the panic was isolated to the active request.
 It recovers the panic, logs a stack trace to the server error log,
-and hangs up the connection.
+and either closes the network connection or sends an HTTP/2
+RST_STREAM, depending on the HTTP protocol. To abort a handler so
+the client sees an interrupted response but the server doesn't log
+an error, panic with the value ErrAbortHandler.
 
-### <a name="FileServer">func</a> [FileServer](./fs.go#L516)
+### <a name="FileServer">func</a> [FileServer](./fs.go#L705)
 ``` go
 func FileServer(root FileSystem) Handler
 ```
@@ -1102,7 +1248,7 @@ ending in "/index.html" to the same path, without the final
 
 ```go
 // Simple static webserver:
-	log.Fatal(http.ListenAndServe(":8080", http.FileServer(http.Dir("/usr/share/doc"))))
+log.Fatal(http.ListenAndServe(":8080", http.FileServer(http.Dir("/usr/share/doc"))))
 ```
 
 </details>
@@ -1114,20 +1260,20 @@ ending in "/index.html" to the same path, without the final
 
 ```go
 // To serve a directory on disk (/tmp) under an alternate URL
-	// path (/tmpfiles/), use StripPrefix to modify the request
-	// URL's path before the FileServer sees it:
-	http.Handle("/tmpfiles/", http.StripPrefix("/tmpfiles/", http.FileServer(http.Dir("/tmp"))))
+// path (/tmpfiles/), use StripPrefix to modify the request
+// URL's path before the FileServer sees it:
+http.Handle("/tmpfiles/", http.StripPrefix("/tmpfiles/", http.FileServer(http.Dir("/tmp"))))
 ```
 
 </details>
-### <a name="NotFoundHandler">func</a> [NotFoundHandler](./server.go#L1747)
+### <a name="NotFoundHandler">func</a> [NotFoundHandler](./server.go#L1968)
 ``` go
 func NotFoundHandler() Handler
 ```
 NotFoundHandler returns a simple request handler
 that replies to each request with a ``404 page not found'' reply.
 
-### <a name="RedirectHandler">func</a> [RedirectHandler](./server.go#L1861)
+### <a name="RedirectHandler">func</a> [RedirectHandler](./server.go#L2094)
 ``` go
 func RedirectHandler(url string, code int) Handler
 ```
@@ -1138,7 +1284,7 @@ status code.
 The provided code should be in the 3xx range and is usually
 StatusMovedPermanently, StatusFound or StatusSeeOther.
 
-### <a name="StripPrefix">func</a> [StripPrefix](./server.go#L1754)
+### <a name="StripPrefix">func</a> [StripPrefix](./server.go#L1975)
 ``` go
 func StripPrefix(prefix string, h Handler) Handler
 ```
@@ -1155,13 +1301,13 @@ replying with an HTTP 404 not found error.
 
 ```go
 // To serve a directory on disk (/tmp) under an alternate URL
-	// path (/tmpfiles/), use StripPrefix to modify the request
-	// URL's path before the FileServer sees it:
-	http.Handle("/tmpfiles/", http.StripPrefix("/tmpfiles/", http.FileServer(http.Dir("/tmp"))))
+// path (/tmpfiles/), use StripPrefix to modify the request
+// URL's path before the FileServer sees it:
+http.Handle("/tmpfiles/", http.StripPrefix("/tmpfiles/", http.FileServer(http.Dir("/tmp"))))
 ```
 
 </details>
-### <a name="TimeoutHandler">func</a> [TimeoutHandler](./server.go#L2489)
+### <a name="TimeoutHandler">func</a> [TimeoutHandler](./server.go#L3090)
 ``` go
 func TimeoutHandler(h Handler, dt time.Duration, msg string) Handler
 ```
@@ -1177,7 +1323,7 @@ ErrHandlerTimeout.
 TimeoutHandler buffers all Handler writes to memory and does not
 support the Hijacker or Flusher interfaces.
 
-## <a name="HandlerFunc">type</a> [HandlerFunc](./server.go#L1722)
+## <a name="HandlerFunc">type</a> [HandlerFunc](./server.go#L1943)
 ``` go
 type HandlerFunc func(ResponseWriter, *Request)
 ```
@@ -1186,7 +1332,7 @@ ordinary functions as HTTP handlers. If f is a function
 with the appropriate signature, HandlerFunc(f) is a
 Handler that calls f.
 
-### <a name="HandlerFunc.ServeHTTP">func</a> (HandlerFunc) [ServeHTTP](./server.go#L1725)
+### <a name="HandlerFunc.ServeHTTP">func</a> (HandlerFunc) [ServeHTTP](./server.go#L1946)
 ``` go
 func (f HandlerFunc) ServeHTTP(w ResponseWriter, r *Request)
 ```
@@ -1205,20 +1351,22 @@ func (h Header) Add(key, value string)
 Add adds the key, value pair to the header.
 It appends to any existing values associated with key.
 
-### <a name="Header.Del">func</a> (Header) [Del](./header.go#L51)
+### <a name="Header.Del">func</a> (Header) [Del](./header.go#L53)
 ``` go
 func (h Header) Del(key string)
 ```
 Del deletes the values associated with key.
 
-### <a name="Header.Get">func</a> (Header) [Get](./header.go#L38)
+### <a name="Header.Get">func</a> (Header) [Get](./header.go#L40)
 ``` go
 func (h Header) Get(key string) string
 ```
 Get gets the first value associated with the given key.
+It is case insensitive; textproto.CanonicalMIMEHeaderKey is used
+to canonicalize the provided key.
 If there are no values associated with the key, Get returns "".
-To access multiple values of a key, access the map directly
-with CanonicalHeaderKey.
+To access multiple values of a key, or to use non-canonical keys,
+access the map directly.
 
 ### <a name="Header.Set">func</a> (Header) [Set](./header.go#L30)
 ``` go
@@ -1228,24 +1376,24 @@ Set sets the header entries associated with key to
 the single element value. It replaces any existing
 values associated with key.
 
-### <a name="Header.Write">func</a> (Header) [Write](./header.go#L56)
+### <a name="Header.Write">func</a> (Header) [Write](./header.go#L58)
 ``` go
 func (h Header) Write(w io.Writer) error
 ```
 Write writes a header in wire format.
 
-### <a name="Header.WriteSubset">func</a> (Header) [WriteSubset](./header.go#L145)
+### <a name="Header.WriteSubset">func</a> (Header) [WriteSubset](./header.go#L147)
 ``` go
 func (h Header) WriteSubset(w io.Writer, exclude map[string]bool) error
 ```
 WriteSubset writes a header in wire format.
 If exclude is not nil, keys where exclude[key] == true are not written.
 
-## <a name="Hijacker">type</a> [Hijacker](./server.go#L147-L160)
+## <a name="Hijacker">type</a> [Hijacker](./server.go#L174-L193)
 ``` go
 type Hijacker interface {
     // Hijack lets the caller take over the connection.
-    // After a call to Hijack(), the HTTP server library
+    // After a call to Hijack the HTTP server library
     // will not do anything else with the connection.
     //
     // It becomes the caller's responsibility to manage
@@ -1255,6 +1403,12 @@ type Hijacker interface {
     // already set, depending on the configuration of the
     // Server. It is the caller's responsibility to set
     // or clear those deadlines as needed.
+    //
+    // The returned bufio.Reader may contain unprocessed buffered
+    // data from the client.
+    //
+    // After a call to Hijack, the original Request.Body must
+    // not be used.
     Hijack() (net.Conn, *bufio.ReadWriter, error)
 }
 ```
@@ -1273,50 +1427,102 @@ should always test for this ability at runtime.
 
 ```go
 http.HandleFunc("/hijack", func(w http.ResponseWriter, r *http.Request) {
-	    hj, ok := w.(http.Hijacker)
-	    if !ok {
-	        http.Error(w, "webserver doesn't support hijacking", http.StatusInternalServerError)
-	        return
-	    }
-	    conn, bufrw, err := hj.Hijack()
-	    if err != nil {
-	        http.Error(w, err.Error(), http.StatusInternalServerError)
-	        return
-	    }
-	    // Don't forget to close the connection:
-	    defer conn.Close()
-	    bufrw.WriteString("Now we're speaking raw TCP. Say hi: ")
-	    bufrw.Flush()
-	    s, err := bufrw.ReadString('\n')
-	    if err != nil {
-	        log.Printf("error reading string: %v", err)
-	        return
-	    }
-	    fmt.Fprintf(bufrw, "You said: %q\nBye.\n", s)
-	    bufrw.Flush()
-	})
+    hj, ok := w.(http.Hijacker)
+    if !ok {
+        http.Error(w, "webserver doesn't support hijacking", http.StatusInternalServerError)
+        return
+    }
+    conn, bufrw, err := hj.Hijack()
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    // Don't forget to close the connection:
+    defer conn.Close()
+    bufrw.WriteString("Now we're speaking raw TCP. Say hi: ")
+    bufrw.Flush()
+    s, err := bufrw.ReadString('\n')
+    if err != nil {
+        log.Printf("error reading string: %v", err)
+        return
+    }
+    fmt.Fprintf(bufrw, "You said: %q\nBye.\n", s)
+    bufrw.Flush()
+})
 ```
 
 </details>
 
-## <a name="ProtocolError">type</a> [ProtocolError](./request.go#L38-L40)
+## <a name="ProtocolError">type</a> [ProtocolError](./request.go#L44-L46)
 ``` go
 type ProtocolError struct {
     ErrorString string
 }
 ```
-HTTP request parsing errors.
+ProtocolError represents an HTTP protocol error.
 
-### <a name="ProtocolError.Error">func</a> (\*ProtocolError) [Error](./request.go#L42)
+Deprecated: Not all errors in the http package related to protocol errors
+are of type ProtocolError.
+
+### <a name="ProtocolError.Error">func</a> (\*ProtocolError) [Error](./request.go#L48)
 ``` go
-func (err *ProtocolError) Error() string
+func (pe *ProtocolError) Error() string
 ```
 
-## <a name="Request">type</a> [Request](./request.go#L76-L268)
+## <a name="PushOptions">type</a> [PushOptions](./http.go#L105-L114)
+``` go
+type PushOptions struct {
+    // Method specifies the HTTP method for the promised request.
+    // If set, it must be "GET" or "HEAD". Empty means "GET".
+    Method string
+
+    // Header specifies additional promised request headers. This cannot
+    // include HTTP/2 pseudo header fields like ":path" and ":scheme",
+    // which will be added automatically.
+    Header Header
+}
+```
+PushOptions describes options for Pusher.Push.
+
+## <a name="Pusher">type</a> [Pusher](./http.go#L119-L141)
+``` go
+type Pusher interface {
+    // Push initiates an HTTP/2 server push. This constructs a synthetic
+    // request using the given target and options, serializes that request
+    // into a PUSH_PROMISE frame, then dispatches that request using the
+    // server's request handler. If opts is nil, default options are used.
+    //
+    // The target must either be an absolute path (like "/path") or an absolute
+    // URL that contains a valid host and the same scheme as the parent request.
+    // If the target is a path, it will inherit the scheme and host of the
+    // parent request.
+    //
+    // The HTTP/2 spec disallows recursive pushes and cross-authority pushes.
+    // Push may or may not detect these invalid pushes; however, invalid
+    // pushes will be detected and canceled by conforming clients.
+    //
+    // Handlers that wish to push URL X should call Push before sending any
+    // data that may trigger a request for URL X. This avoids a race where the
+    // client issues requests for X before receiving the PUSH_PROMISE for X.
+    //
+    // Push returns ErrNotSupported if the client has disabled push or if push
+    // is not supported on the underlying connection.
+    Push(target string, opts *PushOptions) error
+}
+```
+Pusher is the interface implemented by ResponseWriters that support
+HTTP/2 server push. For more background, see
+<a href="https://tools.ietf.org/html/rfc7540#section-8.2">https://tools.ietf.org/html/rfc7540#section-8.2</a>.
+
+## <a name="Request">type</a> [Request](./request.go#L98-L307)
 ``` go
 type Request struct {
     // Method specifies the HTTP method (GET, POST, PUT, etc.).
     // For client requests an empty string means GET.
+    //
+    // Go's HTTP client does not support sending a request with
+    // the CONNECT method. See the documentation on Transport for
+    // details.
     Method string
 
     // URL specifies either the URI being requested (for server
@@ -1387,11 +1593,20 @@ type Request struct {
     // Handler does not need to.
     Body io.ReadCloser
 
+    // GetBody defines an optional func to return a new copy of
+    // Body. It is used for client requests when a redirect requires
+    // reading the body more than once. Use of GetBody still
+    // requires setting Body.
+    //
+    // For server requests it is unused.
+    GetBody func() (io.ReadCloser, error)
+
     // ContentLength records the length of the associated content.
     // The value -1 indicates that the length is unknown.
     // Values >= 0 indicate that the given number of bytes may
     // be read from Body.
-    // For client requests, a value of 0 means unknown if Body is not nil.
+    // For client requests, a value of 0 with a non-nil Body is
+    // also treated as unknown.
     ContentLength int64
 
     // TransferEncoding lists the transfer encodings from outermost to
@@ -1416,11 +1631,15 @@ type Request struct {
     // For server requests Host specifies the host on which the
     // URL is sought. Per RFC 2616, this is either the value of
     // the "Host" header or the host name given in the URL itself.
-    // It may be of the form "host:port".
+    // It may be of the form "host:port". For international domain
+    // names, Host may be in Punycode or Unicode form. Use
+    // golang.org/x/net/idna to convert it to either format if
+    // needed.
     //
     // For client requests Host optionally overrides the Host
     // header to send. If empty, the Request.Write method uses
-    // the value of URL.Host.
+    // the value of URL.Host. Host may contain an international
+    // domain name.
     Host string
 
     // Form contains the parsed form data, including both the URL
@@ -1510,9 +1729,9 @@ The field semantics differ slightly between client and server
 usage. In addition to the notes on the fields below, see the
 documentation for Request.Write and RoundTripper.
 
-### <a name="NewRequest">func</a> [NewRequest](./request.go#L666)
+### <a name="NewRequest">func</a> [NewRequest](./request.go#L769)
 ``` go
-func NewRequest(method, urlStr string, body io.Reader) (*Request, error)
+func NewRequest(method, url string, body io.Reader) (*Request, error)
 ```
 NewRequest returns a new Request given a method, URL, and optional body.
 
@@ -1521,19 +1740,25 @@ Request.Body is set to body and will be closed by the Client
 methods Do, Post, and PostForm, and Transport.RoundTrip.
 
 NewRequest returns a Request suitable for use with Client.Do or
-Transport.RoundTrip.
-To create a request for use with testing a Server Handler use either
-ReadRequest or manually update the Request fields. See the Request
-type's documentation for the difference between inbound and outbound
-request fields.
+Transport.RoundTrip. To create a request for use with testing a
+Server Handler, either use the NewRequest function in the
+net/http/httptest package, use ReadRequest, or manually update the
+Request fields. See the Request type's documentation for the
+difference between inbound and outbound request fields.
 
-### <a name="ReadRequest">func</a> [ReadRequest](./request.go#L777)
+If body is of type *bytes.Buffer, *bytes.Reader, or
+*strings.Reader, the returned request's ContentLength is set to its
+exact value (instead of -1), GetBody is populated (so 307 and 308
+redirects can replay the body), and Body is set to NoBody if the
+ContentLength is 0.
+
+### <a name="ReadRequest">func</a> [ReadRequest](./request.go#L913)
 ``` go
 func ReadRequest(b *bufio.Reader) (*Request, error)
 ```
 ReadRequest reads and parses an incoming request from b.
 
-### <a name="Request.AddCookie">func</a> (\*Request) [AddCookie](./request.go#L333)
+### <a name="Request.AddCookie">func</a> (\*Request) [AddCookie](./request.go#L384)
 ``` go
 func (r *Request) AddCookie(c *Cookie)
 ```
@@ -1542,7 +1767,7 @@ AddCookie does not attach more than one Cookie header field. That
 means all cookies, if any, are written into the same line,
 separated by semicolon.
 
-### <a name="Request.BasicAuth">func</a> (\*Request) [BasicAuth](./request.go#L713)
+### <a name="Request.BasicAuth">func</a> (\*Request) [BasicAuth](./request.go#L849)
 ``` go
 func (r *Request) BasicAuth() (username, password string, ok bool)
 ```
@@ -1550,7 +1775,7 @@ BasicAuth returns the username and password provided in the request's
 Authorization header, if the request uses HTTP Basic Authentication.
 See RFC 2617, Section 2.
 
-### <a name="Request.Context">func</a> (\*Request) [Context](./request.go#L281)
+### <a name="Request.Context">func</a> (\*Request) [Context](./request.go#L320)
 ``` go
 func (r *Request) Context() context.Context
 ```
@@ -1563,30 +1788,32 @@ background context.
 For outgoing client requests, the context controls cancelation.
 
 For incoming server requests, the context is canceled when the
-ServeHTTP method returns. For its associated values, see
-ServerContextKey and LocalAddrContextKey.
+client's connection closes, the request is canceled (with HTTP/2),
+or when the ServeHTTP method returns.
 
-### <a name="Request.Cookie">func</a> (\*Request) [Cookie](./request.go#L322)
+### <a name="Request.Cookie">func</a> (\*Request) [Cookie](./request.go#L373)
 ``` go
 func (r *Request) Cookie(name string) (*Cookie, error)
 ```
 Cookie returns the named cookie provided in the request or
 ErrNoCookie if not found.
+If multiple cookies match the given name, only one cookie will
+be returned.
 
-### <a name="Request.Cookies">func</a> (\*Request) [Cookies](./request.go#L313)
+### <a name="Request.Cookies">func</a> (\*Request) [Cookies](./request.go#L362)
 ``` go
 func (r *Request) Cookies() []*Cookie
 ```
 Cookies parses and returns the HTTP cookies sent with the request.
 
-### <a name="Request.FormFile">func</a> (\*Request) [FormFile](./request.go#L1128)
+### <a name="Request.FormFile">func</a> (\*Request) [FormFile](./request.go#L1268)
 ``` go
 func (r *Request) FormFile(key string) (multipart.File, *multipart.FileHeader, error)
 ```
 FormFile returns the first file for the provided form key.
 FormFile calls ParseMultipartForm and ParseForm if necessary.
 
-### <a name="Request.FormValue">func</a> (\*Request) [FormValue](./request.go#L1101)
+### <a name="Request.FormValue">func</a> (\*Request) [FormValue](./request.go#L1241)
 ``` go
 func (r *Request) FormValue(key string) string
 ```
@@ -1598,7 +1825,7 @@ If key is not present, FormValue returns the empty string.
 To access multiple values of the same key, call ParseForm and
 then inspect Request.Form directly.
 
-### <a name="Request.MultipartReader">func</a> (\*Request) [MultipartReader](./request.go#L366)
+### <a name="Request.MultipartReader">func</a> (\*Request) [MultipartReader](./request.go#L417)
 ``` go
 func (r *Request) MultipartReader() (*multipart.Reader, error)
 ```
@@ -1607,24 +1834,30 @@ multipart/form-data POST request, else returns nil and an error.
 Use this function instead of ParseMultipartForm to
 process the request body as a stream.
 
-### <a name="Request.ParseForm">func</a> (\*Request) [ParseForm](./request.go#L1015)
+### <a name="Request.ParseForm">func</a> (\*Request) [ParseForm](./request.go#L1155)
 ``` go
 func (r *Request) ParseForm() error
 ```
-ParseForm parses the raw query from the URL and updates r.Form.
+ParseForm populates r.Form and r.PostForm.
 
-For POST or PUT requests, it also parses the request body as a form and
-put the results into both r.PostForm and r.Form.
-POST and PUT body parameters take precedence over URL query string values
-in r.Form.
+For all requests, ParseForm parses the raw query from the URL and updates
+r.Form.
+
+For POST, PUT, and PATCH requests, it also parses the request body as a form
+and puts the results into both r.PostForm and r.Form. Request body parameters
+take precedence over URL query string values in r.Form.
+
+For other HTTP methods, or when the Content-Type is not
+application/x-www-form-urlencoded, the request Body is not read, and
+r.PostForm is initialized to a non-nil, empty value.
 
 If the request Body's size has not already been limited by MaxBytesReader,
 the size is capped at 10MB.
 
 ParseMultipartForm calls ParseForm automatically.
-It is idempotent.
+ParseForm is idempotent.
 
-### <a name="Request.ParseMultipartForm">func</a> (\*Request) [ParseMultipartForm](./request.go#L1056)
+### <a name="Request.ParseMultipartForm">func</a> (\*Request) [ParseMultipartForm](./request.go#L1196)
 ``` go
 func (r *Request) ParseMultipartForm(maxMemory int64) error
 ```
@@ -1635,7 +1868,7 @@ disk in temporary files.
 ParseMultipartForm calls ParseForm if necessary.
 After one call to ParseMultipartForm, subsequent calls have no effect.
 
-### <a name="Request.PostFormValue">func</a> (\*Request) [PostFormValue](./request.go#L1116)
+### <a name="Request.PostFormValue">func</a> (\*Request) [PostFormValue](./request.go#L1256)
 ``` go
 func (r *Request) PostFormValue(key string) string
 ```
@@ -1645,14 +1878,14 @@ PostFormValue calls ParseMultipartForm and ParseForm if necessary and ignores
 any errors returned by these functions.
 If key is not present, PostFormValue returns the empty string.
 
-### <a name="Request.ProtoAtLeast">func</a> (\*Request) [ProtoAtLeast](./request.go#L302)
+### <a name="Request.ProtoAtLeast">func</a> (\*Request) [ProtoAtLeast](./request.go#L351)
 ``` go
 func (r *Request) ProtoAtLeast(major, minor int) bool
 ```
 ProtoAtLeast reports whether the HTTP protocol used
 in the request is at least major.minor.
 
-### <a name="Request.Referer">func</a> (\*Request) [Referer](./request.go#L350)
+### <a name="Request.Referer">func</a> (\*Request) [Referer](./request.go#L401)
 ``` go
 func (r *Request) Referer() string
 ```
@@ -1665,7 +1898,7 @@ as a method is that the compiler can diagnose programs that use the
 alternate (correct English) spelling req.Referrer() but cannot
 diagnose programs that use Header["Referrer"].
 
-### <a name="Request.SetBasicAuth">func</a> (\*Request) [SetBasicAuth](./request.go#L745)
+### <a name="Request.SetBasicAuth">func</a> (\*Request) [SetBasicAuth](./request.go#L881)
 ``` go
 func (r *Request) SetBasicAuth(username, password string)
 ```
@@ -1675,20 +1908,20 @@ Basic Authentication with the provided username and password.
 With HTTP Basic Authentication the provided username and password
 are not encrypted.
 
-### <a name="Request.UserAgent">func</a> (\*Request) [UserAgent](./request.go#L308)
+### <a name="Request.UserAgent">func</a> (\*Request) [UserAgent](./request.go#L357)
 ``` go
 func (r *Request) UserAgent() string
 ```
 UserAgent returns the client's User-Agent, if sent in the request.
 
-### <a name="Request.WithContext">func</a> (\*Request) [WithContext](./request.go#L290)
+### <a name="Request.WithContext">func</a> (\*Request) [WithContext](./request.go#L329)
 ``` go
 func (r *Request) WithContext(ctx context.Context) *Request
 ```
 WithContext returns a shallow copy of r with its context changed
 to ctx. The provided ctx must be non-nil.
 
-### <a name="Request.Write">func</a> (\*Request) [Write](./request.go#L426)
+### <a name="Request.Write">func</a> (\*Request) [Write](./request.go#L477)
 ``` go
 func (r *Request) Write(w io.Writer) error
 ```
@@ -1707,7 +1940,7 @@ If Body is present, Content-Length is <= 0 and TransferEncoding
 hasn't been set to "identity", Write adds "Transfer-Encoding:
 chunked" to the header. Body is closed after it is sent.
 
-### <a name="Request.WriteProxy">func</a> (\*Request) [WriteProxy](./request.go#L436)
+### <a name="Request.WriteProxy">func</a> (\*Request) [WriteProxy](./request.go#L487)
 ``` go
 func (r *Request) WriteProxy(w io.Writer) error
 ```
@@ -1718,7 +1951,7 @@ section 5.1.2 of RFC 2616, including the scheme and host.
 In either case, WriteProxy also writes a Host header, using
 either r.Host or r.URL.Host.
 
-## <a name="Response">type</a> [Response](./response.go#L30-L109)
+## <a name="Response">type</a> [Response](./response.go#L33-L116)
 ``` go
 type Response struct {
     Status     string // e.g. "200 OK"
@@ -1730,22 +1963,26 @@ type Response struct {
     // Header maps header keys to values. If the response had multiple
     // headers with the same key, they may be concatenated, with comma
     // delimiters.  (Section 4.2 of RFC 2616 requires that multiple headers
-    // be semantically equivalent to a comma-delimited sequence.) Values
-    // duplicated by other fields in this struct (e.g., ContentLength) are
-    // omitted from Header.
+    // be semantically equivalent to a comma-delimited sequence.) When
+    // Header values are duplicated by other fields in this struct (e.g.,
+    // ContentLength, TransferEncoding, Trailer), the field values are
+    // authoritative.
     //
     // Keys in the map are canonicalized (see CanonicalHeaderKey).
     Header Header
 
     // Body represents the response body.
     //
+    // The response body is streamed on demand as the Body field
+    // is read. If the network connection fails or the server
+    // terminates the response, Body.Read calls return an error.
+    //
     // The http Client and Transport guarantee that Body is always
     // non-nil, even on responses without a body or responses with
     // a zero-length body. It is the caller's responsibility to
-    // close Body. The default HTTP client's Transport does not
-    // attempt to reuse HTTP/1.0 or HTTP/1.1 TCP connections
-    // ("keep-alive") unless the Body is read to completion and is
-    // closed.
+    // close Body. The default HTTP client's Transport may not
+    // reuse HTTP/1.x "keep-alive" TCP connections if the Body is
+    // not read to completion and closed.
     //
     // The Body is automatically dechunked if the server replied
     // with a "chunked" Transfer-Encoding.
@@ -1803,7 +2040,11 @@ type Response struct {
 ```
 Response represents the response from an HTTP request.
 
-### <a name="Get">func</a> [Get](./client.go#L392)
+The Client and Transport return Responses from servers once
+the response headers have been received. The response body
+is streamed on demand as the Body field is read.
+
+### <a name="Get">func</a> [Get](./client.go#L369)
 ``` go
 func Get(url string) (resp *Response, err error)
 ```
@@ -1815,6 +2056,7 @@ maximum of 10 redirects:
 	302 (Found)
 	303 (See Other)
 	307 (Temporary Redirect)
+	308 (Permanent Redirect)
 
 An error is returned if there were too many redirects or if there
 was an HTTP protocol error. A non-2xx response doesn't cause an
@@ -1835,23 +2077,23 @@ DefaultClient.Do.
 
 ```go
 res, err := http.Get("http://www.google.com/robots.txt")
-	if err != nil {
-	    log.Fatal(err)
-	}
-	robots, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-	    log.Fatal(err)
-	}
-	fmt.Printf("%s", robots)
+if err != nil {
+    log.Fatal(err)
+}
+robots, err := ioutil.ReadAll(res.Body)
+res.Body.Close()
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("%s", robots)
 ```
 
 </details>
-### <a name="Head">func</a> [Head](./client.go#L618)
+### <a name="Head">func</a> [Head](./client.go#L788)
 ``` go
 func Head(url string) (resp *Response, err error)
 ```
-Head issues a HEAD to the specified URL.  If the response is one of
+Head issues a HEAD to the specified URL. If the response is one of
 the following redirect codes, Head follows the redirect, up to a
 maximum of 10 redirects:
 
@@ -1859,12 +2101,13 @@ maximum of 10 redirects:
 	302 (Found)
 	303 (See Other)
 	307 (Temporary Redirect)
+	308 (Permanent Redirect)
 
 Head is a wrapper around DefaultClient.Head
 
-### <a name="Post">func</a> [Post](./client.go#L561)
+### <a name="Post">func</a> [Post](./client.go#L721)
 ``` go
-func Post(url string, bodyType string, body io.Reader) (resp *Response, err error)
+func Post(url string, contentType string, body io.Reader) (resp *Response, err error)
 ```
 Post issues a POST to the specified URL.
 
@@ -1877,7 +2120,10 @@ Post is a wrapper around DefaultClient.Post.
 
 To set custom headers, use NewRequest and DefaultClient.Do.
 
-### <a name="PostForm">func</a> [PostForm](./client.go#L592)
+See the Client.Do method documentation for details on how redirects
+are handled.
+
+### <a name="PostForm">func</a> [PostForm](./client.go#L758)
 ``` go
 func PostForm(url string, data url.Values) (resp *Response, err error)
 ```
@@ -1892,7 +2138,10 @@ Caller should close resp.Body when done reading from it.
 
 PostForm is a wrapper around DefaultClient.PostForm.
 
-### <a name="ReadResponse">func</a> [ReadResponse](./response.go#L141)
+See the Client.Do method documentation for details on how redirects
+are handled.
+
+### <a name="ReadResponse">func</a> [ReadResponse](./response.go#L148)
 ``` go
 func ReadResponse(r *bufio.Reader, req *Request) (*Response, error)
 ```
@@ -1903,13 +2152,13 @@ Clients must call resp.Body.Close when finished reading resp.Body.
 After that call, clients can inspect resp.Trailer to find key/value
 pairs included in the response trailer.
 
-### <a name="Response.Cookies">func</a> (\*Response) [Cookies](./response.go#L112)
+### <a name="Response.Cookies">func</a> (\*Response) [Cookies](./response.go#L119)
 ``` go
 func (r *Response) Cookies() []*Cookie
 ```
 Cookies parses and returns the cookies set in the Set-Cookie headers.
 
-### <a name="Response.Location">func</a> (\*Response) [Location](./response.go#L124)
+### <a name="Response.Location">func</a> (\*Response) [Location](./response.go#L131)
 ``` go
 func (r *Response) Location() (*url.URL, error)
 ```
@@ -1918,14 +2167,14 @@ if present. Relative redirects are resolved relative to
 the Response's Request. ErrNoLocation is returned if no
 Location header is present.
 
-### <a name="Response.ProtoAtLeast">func</a> (\*Response) [ProtoAtLeast](./response.go#L211)
+### <a name="Response.ProtoAtLeast">func</a> (\*Response) [ProtoAtLeast](./response.go#L218)
 ``` go
 func (r *Response) ProtoAtLeast(major, minor int) bool
 ```
 ProtoAtLeast reports whether the HTTP protocol used
 in the response is at least major.minor.
 
-### <a name="Response.Write">func</a> (\*Response) [Write](./response.go#L232)
+### <a name="Response.Write">func</a> (\*Response) [Write](./response.go#L239)
 ``` go
 func (r *Response) Write(w io.Writer) error
 ```
@@ -1946,15 +2195,29 @@ This method consults the following fields of the response r:
 
 The Response Body is closed after it is sent.
 
-## <a name="ResponseWriter">type</a> [ResponseWriter](./server.go#L86-L122)
+## <a name="ResponseWriter">type</a> [ResponseWriter](./server.go#L91-L149)
 ``` go
 type ResponseWriter interface {
     // Header returns the header map that will be sent by
-    // WriteHeader. Changing the header after a call to
-    // WriteHeader (or Write) has no effect unless the modified
-    // headers were declared as trailers by setting the
-    // "Trailer" header before the call to WriteHeader (see example).
-    // To suppress implicit response headers, set their value to nil.
+    // WriteHeader. The Header map also is the mechanism with which
+    // Handlers can set HTTP trailers.
+    //
+    // Changing the header map after a call to WriteHeader (or
+    // Write) has no effect unless the modified headers are
+    // trailers.
+    //
+    // There are two ways to set Trailers. The preferred way is to
+    // predeclare in the headers which trailers you will later
+    // send by setting the "Trailer" header to the names of the
+    // trailer keys which will come later. In this case, those
+    // keys of the Header map are treated as if they were
+    // trailers. See the example. The second way, for trailer
+    // keys not known to the Handler until after the first Write,
+    // is to prefix the Header map keys with the TrailerPrefix
+    // constant value. See TrailerPrefix.
+    //
+    // To suppress implicit response headers (such as "Date"), set
+    // their value to nil.
     Header() Header
 
     // Write writes the data to the connection as part of an HTTP reply.
@@ -1978,12 +2241,20 @@ type ResponseWriter interface {
     // possible to maximize compatibility.
     Write([]byte) (int, error)
 
-    // WriteHeader sends an HTTP response header with status code.
+    // WriteHeader sends an HTTP response header with the provided
+    // status code.
+    //
     // If WriteHeader is not called explicitly, the first call to Write
     // will trigger an implicit WriteHeader(http.StatusOK).
     // Thus explicit calls to WriteHeader are mainly used to
     // send error codes.
-    WriteHeader(int)
+    //
+    // The provided code must be a valid HTTP 1xx-5xx status code.
+    // Only one header may be written. Go does not currently
+    // support sending user-defined 1xx informational headers,
+    // with the exception of 100-continue response header that the
+    // Server sends automatically when the Request.Body is read.
+    WriteHeader(statusCode int)
 }
 ```
 A ResponseWriter interface is used by an HTTP handler to
@@ -1999,27 +2270,27 @@ has returned.
 
 ```go
 mux := http.NewServeMux()
-	mux.HandleFunc("/sendstrailers", func(w http.ResponseWriter, req *http.Request) {
-	    // Before any call to WriteHeader or Write, declare
-	    // the trailers you will set during the HTTP
-	    // response. These three headers are actually sent in
-	    // the trailer.
-	    w.Header().Set("Trailer", "AtEnd1, AtEnd2")
-	    w.Header().Add("Trailer", "AtEnd3")
-	
-	    w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
-	    w.WriteHeader(http.StatusOK)
-	
-	    w.Header().Set("AtEnd1", "value 1")
-	    io.WriteString(w, "This HTTP response has both headers before this text and trailers at the end.\n")
-	    w.Header().Set("AtEnd2", "value 2")
-	    w.Header().Set("AtEnd3", "value 3") // These will appear as trailers.
-	})
+mux.HandleFunc("/sendstrailers", func(w http.ResponseWriter, req *http.Request) {
+    // Before any call to WriteHeader or Write, declare
+    // the trailers you will set during the HTTP
+    // response. These three headers are actually sent in
+    // the trailer.
+    w.Header().Set("Trailer", "AtEnd1, AtEnd2")
+    w.Header().Add("Trailer", "AtEnd3")
+
+    w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
+    w.WriteHeader(http.StatusOK)
+
+    w.Header().Set("AtEnd1", "value 1")
+    io.WriteString(w, "This HTTP response has both headers before this text and trailers at the end.\n")
+    w.Header().Set("AtEnd2", "value 2")
+    w.Header().Set("AtEnd3", "value 3") // These will appear as trailers.
+})
 ```
 
 </details>
 
-## <a name="RoundTripper">type</a> [RoundTripper](./client.go#L91-L114)
+## <a name="RoundTripper">type</a> [RoundTripper](./client.go#L117-L143)
 ``` go
 type RoundTripper interface {
     // RoundTrip executes a single HTTP transaction, returning
@@ -2034,7 +2305,10 @@ type RoundTripper interface {
     // authentication, or cookies.
     //
     // RoundTrip should not modify the request, except for
-    // consuming and closing the Request's Body.
+    // consuming and closing the Request's Body. RoundTrip may
+    // read fields of the request in a separate goroutine. Callers
+    // should not mutate the request until the Response's Body has
+    // been closed.
     //
     // RoundTrip must always close the body, including on errors,
     // but depending on the implementation may do so in a separate
@@ -2058,6 +2332,7 @@ var DefaultTransport RoundTripper = &Transport{
     DialContext: (&net.Dialer{
         Timeout:   30 * time.Second,
         KeepAlive: 30 * time.Second,
+        DualStack: true,
     }).DialContext,
     MaxIdleConns:          100,
     IdleConnTimeout:       90 * time.Second,
@@ -2089,7 +2364,7 @@ protocol with a Transport, as in:
 	res, err := c.Get("file:///etc/passwd")
 	...
 
-## <a name="ServeMux">type</a> [ServeMux](./server.go#L1900-L1904)
+## <a name="ServeMux">type</a> [ServeMux](./server.go#L2133-L2137)
 ``` go
 type ServeMux struct {
     // contains filtered or unexported fields
@@ -2131,13 +2406,13 @@ ServeMux also takes care of sanitizing the URL request path,
 redirecting any request containing . or .. elements or repeated slashes
 to an equivalent, cleaner URL.
 
-### <a name="NewServeMux">func</a> [NewServeMux](./server.go#L1913)
+### <a name="NewServeMux">func</a> [NewServeMux](./server.go#L2145)
 ``` go
 func NewServeMux() *ServeMux
 ```
 NewServeMux allocates and returns a new ServeMux.
 
-### <a name="ServeMux.Handle">func</a> (\*ServeMux) [Handle](./server.go#L2027)
+### <a name="ServeMux.Handle">func</a> (\*ServeMux) [Handle](./server.go#L2342)
 ``` go
 func (mux *ServeMux) Handle(pattern string, handler Handler)
 ```
@@ -2151,27 +2426,27 @@ If a handler already exists for pattern, Handle panics.
 
 ```go
 mux := http.NewServeMux()
-	mux.Handle("/api/", apiHandler{})
-	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-	    // The "/" pattern matches everything, so we need to check
-	    // that we're at the root here.
-	    if req.URL.Path != "/" {
-	        http.NotFound(w, req)
-	        return
-	    }
-	    fmt.Fprintf(w, "Welcome to the home page!")
-	})
+mux.Handle("/api/", apiHandler{})
+mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+    // The "/" pattern matches everything, so we need to check
+    // that we're at the root here.
+    if req.URL.Path != "/" {
+        http.NotFound(w, req)
+        return
+    }
+    fmt.Fprintf(w, "Welcome to the home page!")
+})
 ```
 
 </details>
 
-### <a name="ServeMux.HandleFunc">func</a> (\*ServeMux) [HandleFunc](./server.go#L2069)
+### <a name="ServeMux.HandleFunc">func</a> (\*ServeMux) [HandleFunc](./server.go#L2367)
 ``` go
 func (mux *ServeMux) HandleFunc(pattern string, handler func(ResponseWriter, *Request))
 ```
 HandleFunc registers the handler function for the given pattern.
 
-### <a name="ServeMux.Handler">func</a> (\*ServeMux) [Handler](./server.go#L1979)
+### <a name="ServeMux.Handler">func</a> (\*ServeMux) [Handler](./server.go#L2272)
 ``` go
 func (mux *ServeMux) Handler(r *Request) (h Handler, pattern string)
 ```
@@ -2179,7 +2454,10 @@ Handler returns the handler to use for the given request,
 consulting r.Method, r.Host, and r.URL.Path. It always returns
 a non-nil handler. If the path is not in its canonical form, the
 handler will be an internally-generated handler that redirects
-to the canonical path.
+to the canonical path. If the host contains a port, it is ignored
+when matching handlers.
+
+The path and host are used unchanged for CONNECT requests.
 
 Handler also returns the registered pattern that matches the
 request or, in the case of internally-generated redirects,
@@ -2188,21 +2466,54 @@ the pattern that will match after following the redirect.
 If there is no registered handler that applies to the request,
 Handler returns a ``page not found'' handler and an empty pattern.
 
-### <a name="ServeMux.ServeHTTP">func</a> (\*ServeMux) [ServeHTTP](./server.go#L2013)
+### <a name="ServeMux.ServeHTTP">func</a> (\*ServeMux) [ServeHTTP](./server.go#L2328)
 ``` go
 func (mux *ServeMux) ServeHTTP(w ResponseWriter, r *Request)
 ```
 ServeHTTP dispatches the request to the handler whose
 pattern most closely matches the request URL.
 
-## <a name="Server">type</a> [Server](./server.go#L2096-L2134)
+## <a name="Server">type</a> [Server](./server.go#L2409-L2488)
 ``` go
 type Server struct {
-    Addr         string        // TCP address to listen on, ":http" if empty
-    Handler      Handler       // handler to invoke, http.DefaultServeMux if nil
-    ReadTimeout  time.Duration // maximum duration before timing out read of the request
-    WriteTimeout time.Duration // maximum duration before timing out write of the response
-    TLSConfig    *tls.Config   // optional TLS config, used by ListenAndServeTLS
+    Addr    string  // TCP address to listen on, ":http" if empty
+    Handler Handler // handler to invoke, http.DefaultServeMux if nil
+
+    // TLSConfig optionally provides a TLS configuration for use
+    // by ServeTLS and ListenAndServeTLS. Note that this value is
+    // cloned by ServeTLS and ListenAndServeTLS, so it's not
+    // possible to modify the configuration with methods like
+    // tls.Config.SetSessionTicketKeys. To use
+    // SetSessionTicketKeys, use Server.Serve with a TLS Listener
+    // instead.
+    TLSConfig *tls.Config
+
+    // ReadTimeout is the maximum duration for reading the entire
+    // request, including the body.
+    //
+    // Because ReadTimeout does not let Handlers make per-request
+    // decisions on each request body's acceptable deadline or
+    // upload rate, most users will prefer to use
+    // ReadHeaderTimeout. It is valid to use them both.
+    ReadTimeout time.Duration
+
+    // ReadHeaderTimeout is the amount of time allowed to read
+    // request headers. The connection's read deadline is reset
+    // after reading the headers and the Handler can decide what
+    // is considered too slow for the body.
+    ReadHeaderTimeout time.Duration
+
+    // WriteTimeout is the maximum duration before timing out
+    // writes of the response. It is reset whenever a new
+    // request's header is read. Like ReadTimeout, it does not
+    // let Handlers make decisions on a per-request basis.
+    WriteTimeout time.Duration
+
+    // IdleTimeout is the maximum amount of time to wait for the
+    // next request when keep-alives are enabled. If IdleTimeout
+    // is zero, the value of ReadTimeout is used. If both are
+    // zero, ReadHeaderTimeout is used.
+    IdleTimeout time.Duration
 
     // MaxHeaderBytes controls the maximum number of bytes the
     // server will read parsing the request header's keys and
@@ -2218,7 +2529,8 @@ type Server struct {
     // handle HTTP requests and will initialize the Request's TLS
     // and RemoteAddr if not already set. The connection is
     // automatically closed when the function returns.
-    // If TLSNextProto is nil, HTTP/2 support is enabled automatically.
+    // If TLSNextProto is not nil, HTTP/2 support is not enabled
+    // automatically.
     TLSNextProto map[string]func(*Server, *tls.Conn, Handler)
 
     // ConnState specifies an optional callback function that is
@@ -2227,9 +2539,9 @@ type Server struct {
     ConnState func(net.Conn, ConnState)
 
     // ErrorLog specifies an optional logger for errors accepting
-    // connections and unexpected behavior from handlers.
-    // If nil, logging goes to os.Stderr via the log package's
-    // standard logger.
+    // connections, unexpected behavior from handlers, and
+    // underlying FileSystem errors.
+    // If nil, logging is done via the log package's standard logger.
     ErrorLog *log.Logger
     // contains filtered or unexported fields
 }
@@ -2237,7 +2549,21 @@ type Server struct {
 A Server defines parameters for running an HTTP server.
 The zero value for Server is a valid configuration.
 
-### <a name="Server.ListenAndServe">func</a> (\*Server) [ListenAndServe](./server.go#L2210)
+### <a name="Server.Close">func</a> (\*Server) [Close](./server.go#L2524)
+``` go
+func (srv *Server) Close() error
+```
+Close immediately closes all active net.Listeners and any
+connections in state StateNew, StateActive, or StateIdle. For a
+graceful shutdown, use Shutdown.
+
+Close does not attempt to close (and does not even know about)
+any hijacked connections, such as WebSockets.
+
+Close returns any error returned from closing the Server's
+underlying Listener(s).
+
+### <a name="Server.ListenAndServe">func</a> (\*Server) [ListenAndServe](./server.go#L2702)
 ``` go
 func (srv *Server) ListenAndServe() error
 ```
@@ -2247,7 +2573,7 @@ Accepted connections are configured to enable TCP keep-alives.
 If srv.Addr is blank, ":http" is used.
 ListenAndServe always returns a non-nil error.
 
-### <a name="Server.ListenAndServeTLS">func</a> (\*Server) [ListenAndServeTLS](./server.go#L2401)
+### <a name="Server.ListenAndServeTLS">func</a> (\*Server) [ListenAndServeTLS](./server.go#L3019)
 ``` go
 func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error
 ```
@@ -2266,7 +2592,17 @@ If srv.Addr is blank, ":https" is used.
 
 ListenAndServeTLS always returns a non-nil error.
 
-### <a name="Server.Serve">func</a> (\*Server) [Serve](./server.go#L2256)
+### <a name="Server.RegisterOnShutdown">func</a> (\*Server) [RegisterOnShutdown](./server.go#L2593)
+``` go
+func (srv *Server) RegisterOnShutdown(f func())
+```
+RegisterOnShutdown registers a function to call on Shutdown.
+This can be used to gracefully shutdown connections that have
+undergone NPN/ALPN protocol upgrade or that have been hijacked.
+This function should start protocol-specific graceful shutdown,
+but should not wait for shutdown to complete.
+
+### <a name="Server.Serve">func</a> (\*Server) [Serve](./server.go#L2753)
 ``` go
 func (srv *Server) Serve(l net.Listener) error
 ```
@@ -2279,9 +2615,32 @@ provided listener's TLS Config before calling Serve. If
 srv.TLSConfig is non-nil and doesn't include the string "h2" in
 Config.NextProtos, HTTP/2 support is not enabled.
 
-Serve always returns a non-nil error.
+Serve always returns a non-nil error. After Shutdown or Close, the
+returned error is ErrServerClosed.
 
-### <a name="Server.SetKeepAlivesEnabled">func</a> (\*Server) [SetKeepAlivesEnabled](./server.go#L2305)
+### <a name="Server.ServeTLS">func</a> (\*Server) [ServeTLS](./server.go#L2816)
+``` go
+func (srv *Server) ServeTLS(l net.Listener, certFile, keyFile string) error
+```
+ServeTLS accepts incoming connections on the Listener l, creating a
+new service goroutine for each. The service goroutines read requests and
+then call srv.Handler to reply to them.
+
+Additionally, files containing a certificate and matching private key for
+the server must be provided if neither the Server's TLSConfig.Certificates
+nor TLSConfig.GetCertificate are populated.. If the certificate is signed by
+a certificate authority, the certFile should be the concatenation of the
+server's certificate, any intermediates, and the CA's certificate.
+
+For HTTP/2 support, srv.TLSConfig should be initialized to the
+provided listener's TLS Config before calling ServeTLS. If
+srv.TLSConfig is non-nil and doesn't include the string "h2" in
+Config.NextProtos, HTTP/2 support is not enabled.
+
+ServeTLS always returns a non-nil error. After Shutdown or Close, the
+returned error is ErrServerClosed.
+
+### <a name="Server.SetKeepAlivesEnabled">func</a> (\*Server) [SetKeepAlivesEnabled](./server.go#L2899)
 ``` go
 func (srv *Server) SetKeepAlivesEnabled(v bool)
 ```
@@ -2290,13 +2649,72 @@ By default, keep-alives are always enabled. Only very
 resource-constrained environments or servers in the process of
 shutting down should disable them.
 
-## <a name="Transport">type</a> [Transport](./transport.go#L71-L187)
+### <a name="Server.Shutdown">func</a> (\*Server) [Shutdown](./server.go#L2562)
+``` go
+func (srv *Server) Shutdown(ctx context.Context) error
+```
+Shutdown gracefully shuts down the server without interrupting any
+active connections. Shutdown works by first closing all open
+listeners, then closing all idle connections, and then waiting
+indefinitely for connections to return to idle and then shut down.
+If the provided context expires before the shutdown is complete,
+Shutdown returns the context's error, otherwise it returns any
+error returned from closing the Server's underlying Listener(s).
+
+When Shutdown is called, Serve, ListenAndServe, and
+ListenAndServeTLS immediately return ErrServerClosed. Make sure the
+program doesn't exit and waits instead for Shutdown to return.
+
+Shutdown does not attempt to close nor wait for hijacked
+connections such as WebSockets. The caller of Shutdown should
+separately notify such long-lived connections of shutdown and wait
+for them to close, if desired. See RegisterOnShutdown for a way to
+register shutdown notification functions.
+
+#### Example:
+
+<details>
+<summary>Click to expand code.</summary>
+
+```go
+var srv http.Server
+
+idleConnsClosed := make(chan struct{})
+go func() {
+    sigint := make(chan os.Signal, 1)
+    signal.Notify(sigint, os.Interrupt)
+    <-sigint
+
+    // We received an interrupt signal, shut down.
+    if err := srv.Shutdown(context.Background()); err != nil {
+        // Error from closing listeners, or context timeout:
+        log.Printf("HTTP server Shutdown: %v", err)
+    }
+    close(idleConnsClosed)
+}()
+
+if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+    // Error starting or closing listener:
+    log.Printf("HTTP server ListenAndServe: %v", err)
+}
+
+<-idleConnsClosed
+```
+
+</details>
+
+## <a name="Transport">type</a> [Transport](./transport.go#L85-L215)
 ``` go
 type Transport struct {
 
     // Proxy specifies a function to return a proxy for a given
     // Request. If the function returns a non-nil error, the
     // request is aborted with the provided error.
+    //
+    // The proxy type is determined by the URL scheme. "http"
+    // and "socks5" are supported. If the scheme is empty,
+    // "http" is assumed.
+    //
     // If Proxy is nil or returns a nil *URL, no proxy is used.
     Proxy func(*Request) (*url.URL, error)
 
@@ -2324,7 +2742,9 @@ type Transport struct {
     DialTLS func(network, addr string) (net.Conn, error)
 
     // TLSClientConfig specifies the TLS configuration to use with
-    // tls.Client. If nil, the default configuration is used.
+    // tls.Client.
+    // If nil, the default configuration is used.
+    // If non-nil, HTTP/2 support may not be enabled by default.
     TLSClientConfig *tls.Config
 
     // TLSHandshakeTimeout specifies the maximum amount of time waiting to
@@ -2369,7 +2789,9 @@ type Transport struct {
     // ExpectContinueTimeout, if non-zero, specifies the amount of
     // time to wait for a server's first response headers after fully
     // writing the request headers if the request has an
-    // "Expect: 100-continue" header. Zero means no timeout.
+    // "Expect: 100-continue" header. Zero means no timeout and
+    // causes the body to be sent immediately, without
+    // waiting for the server to approve.
     // This time does not include the time to send the request header.
     ExpectContinueTimeout time.Duration
 
@@ -2381,8 +2803,13 @@ type Transport struct {
     // called with the request's authority (such as "example.com"
     // or "example.com:1234") and the TLS connection. The function
     // must return a RoundTripper that then handles the request.
-    // If TLSNextProto is nil, HTTP/2 support is enabled automatically.
+    // If TLSNextProto is not nil, HTTP/2 support is not enabled
+    // automatically.
     TLSNextProto map[string]func(authority string, c *tls.Conn) RoundTripper
+
+    // ProxyConnectHeader optionally specifies headers to send to
+    // proxies during CONNECT requests.
+    ProxyConnectHeader Header
 
     // MaxResponseHeaderBytes specifies a limit on how many
     // response bytes are allowed in the server's response
@@ -2408,10 +2835,21 @@ A Transport is a low-level primitive for making HTTP and HTTPS requests.
 For high-level functionality, such as cookies and redirects, see Client.
 
 Transport uses HTTP/1.1 for HTTP URLs and either HTTP/1.1 or HTTP/2
-for HTTPS URLs, depending on whether the server supports HTTP/2.
-See the package docs for more about HTTP/2.
+for HTTPS URLs, depending on whether the server supports HTTP/2,
+and how the Transport is configured. The DefaultTransport supports HTTP/2.
+To explicitly enable HTTP/2 on a transport, use golang.org/x/net/http2
+and call ConfigureTransport. See the package docs for more about HTTP/2.
 
-### <a name="Transport.CancelRequest">func</a> (\*Transport) [CancelRequest](./transport.go#L504)
+The Transport will send CONNECT requests to a proxy for its own use
+when processing HTTPS requests, but Transport should generally not
+be used to send a CONNECT request. That is, the Request passed to
+the RoundTrip method should not have a Method of "CONNECT", as Go's
+HTTP/1.x implementation does not support full-duplex request bodies
+being written while the response body is streamed. Go's HTTP/2
+implementation does support full duplex, but many CONNECT proxies speak
+HTTP/1.x.
+
+### <a name="Transport.CancelRequest">func</a> (\*Transport) [CancelRequest](./transport.go#L558)
 ``` go
 func (t *Transport) CancelRequest(req *Request)
 ```
@@ -2422,7 +2860,7 @@ Deprecated: Use Request.WithContext to create a request with a
 cancelable context instead. CancelRequest cannot cancel HTTP/2
 requests.
 
-### <a name="Transport.CloseIdleConnections">func</a> (\*Transport) [CloseIdleConnections](./transport.go#L479)
+### <a name="Transport.CloseIdleConnections">func</a> (\*Transport) [CloseIdleConnections](./transport.go#L533)
 ``` go
 func (t *Transport) CloseIdleConnections()
 ```
@@ -2431,7 +2869,7 @@ connected from previous requests but are now sitting idle in
 a "keep-alive" state. It does not interrupt any connections currently
 in use.
 
-### <a name="Transport.RegisterProtocol">func</a> (\*Transport) [RegisterProtocol](./transport.go#L463)
+### <a name="Transport.RegisterProtocol">func</a> (\*Transport) [RegisterProtocol](./transport.go#L514)
 ``` go
 func (t *Transport) RegisterProtocol(scheme string, rt RoundTripper)
 ```
@@ -2446,7 +2884,7 @@ If rt.RoundTrip returns ErrSkipAltProtocol, the Transport will
 handle the RoundTrip itself for that one request, as if the
 protocol were not registered.
 
-### <a name="Transport.RoundTrip">func</a> (\*Transport) [RoundTrip](./transport.go#L306)
+### <a name="Transport.RoundTrip">func</a> (\*Transport) [RoundTrip](./transport.go#L350)
 ``` go
 func (t *Transport) RoundTrip(req *Request) (*Response, error)
 ```
@@ -2455,5 +2893,12 @@ RoundTrip implements the RoundTripper interface.
 For higher-level HTTP client support (such as handling of cookies
 and redirects), see Get, Post, and the Client type.
 
-- - -
-Generated by [godoc2ghmd](https://github.com/GandalfUK/godoc2ghmd)
+## <a name="Subdirectories">Subdirectories</a>
+
+* [cgi](./cgi) Package cgi implements CGI (Common Gateway Interface) as specified in RFC 3875.
+* [cookiejar](./cookiejar) Package cookiejar implements an in-memory RFC 6265-compliant http.CookieJar.
+* [fcgi](./fcgi) Package fcgi implements the FastCGI protocol.
+* [httptest](./httptest) Package httptest provides utilities for HTTP testing.
+* [httptrace](./httptrace) Package httptrace provides mechanisms to trace the events within HTTP client requests.
+* [httputil](./httputil) Package httputil provides HTTP utility functions, complementing the more common ones in the net/http package.
+* [pprof](./pprof) Package pprof serves via its HTTP server runtime profiling data in the format expected by the pprof visualization tool.

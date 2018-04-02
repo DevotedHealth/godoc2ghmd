@@ -1,4 +1,7 @@
-.PHONY: lint test
+.PHONY: all lint test
+
+all:
+	go generate
 
 test:
 	go test -cover .

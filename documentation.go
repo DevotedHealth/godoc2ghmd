@@ -1,4 +1,4 @@
-// (godoc-to-GitHub-MarkDown) generates package documentation in
+// godoc2ghmd (godoc-to-GitHub-MarkDown) generates package documentation in
 // GitHub flavoured Markdown.
 //
 // Usage:

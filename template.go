@@ -5,6 +5,7 @@ var pkgTemplate = `{{with .PDoc}}
 # {{ base .ImportPath }}
 
 {{ base .ImportPath }} is a main package.
+
 {{comment_md .Doc}}
 {{else}}
 # {{ .Name }}
