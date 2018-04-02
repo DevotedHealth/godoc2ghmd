@@ -223,6 +223,7 @@ func main() {
 		"gh_url":       ghURLFunc,
 		"import_as":    importAsFunc,
 		"list_imports": listImportsFunc,
+		"indent":       indentFunc,
 	}
 
 	readTemplates(pres, *templatePath, false)
