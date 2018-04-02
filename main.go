@@ -62,6 +62,7 @@ const (
 	invalidImportKey = "invalid"
 )
 
+// nolint: gocyclo
 func init() {
 	flag.Usage = usage
 	flag.Parse()
@@ -105,7 +106,7 @@ var (
 
 const punchCardWidth = 80
 
-func pkgDoc_mdFunc(comment string) string {
+func pkgDocMdFunc(comment string) string {
 	var buf bytes.Buffer
 	ToMD(&buf, comment, nil)
 
@@ -117,7 +118,7 @@ func pkgDoc_mdFunc(comment string) string {
 	return s
 }
 
-func comment_mdFunc(comment string) string {
+func commentMdFunc(comment string) string {
 	var buf bytes.Buffer
 	ToMD(&buf, comment, nil)
 	return buf.String()
@@ -133,7 +134,7 @@ func preFunc(text string) string {
 	return "``` go\n" + text + "\n```"
 }
 
-func ghUrlFunc(info *godoc.PageInfo, n interface{}) string {
+func ghURLFunc(info *godoc.PageInfo, n interface{}) string {
 	var pos, end token.Pos
 
 	switch an := n.(type) {
@@ -209,13 +210,13 @@ func main() {
 	pres.HTMLMode = false
 
 	funcs = map[string]interface{}{
-		"pkgdoc_md":    pkgDoc_mdFunc,
-		"comment_md":   comment_mdFunc,
+		"pkgdoc_md":    pkgDocMdFunc,
+		"comment_md":   commentMdFunc,
 		"example_md":   (*myPres)(pres).exampleMDFunc,
 		"base":         path.Base,
 		"md":           mdFunc,
 		"pre":          preFunc,
-		"gh_url":       ghUrlFunc,
+		"gh_url":       ghURLFunc,
 		"import_as":    importAsFunc,
 		"list_imports": listImportsFunc,
 	}

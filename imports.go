@@ -191,6 +191,7 @@ func importAsFunc(importPath string) string {
 	return importPath
 }
 
+// nolint: gocyclo
 func listImportsFunc(info *godoc.PageInfo, imports []string, importPath string) string {
 	var repoOwnerAndName string
 	if strings.HasPrefix(importPath, "github.com") {
@@ -219,20 +220,20 @@ func listImportsFunc(info *godoc.PageInfo, imports []string, importPath string) 
 			nonStd[i] = fmt.Sprintf("[%s](./%s)", imp, rel)
 			continue
 		}
-		godocUrl := "https://godoc.org/" + imp
+		godocURL := "https://godoc.org/" + imp
 		isVendored := isImportVendored(imp)
 		if !*verifyImportLinks {
 			if !isVendored {
-				nonStd[i] = fmt.Sprintf("[%s](%s)", imp, godocUrl)
+				nonStd[i] = fmt.Sprintf("[%s](%s)", imp, godocURL)
 				continue
 			} else {
-				nonStd[i] = fmt.Sprintf("[%s](%s) ([godoc](%s))", imp, "/vendor/"+imp, godocUrl)
+				nonStd[i] = fmt.Sprintf("[%s](%s) ([godoc](%s))", imp, "/vendor/"+imp, godocURL)
 				continue
 			}
 		} else {
-			hasGodoc := isValidGodocUrl(godocUrl, importLinksState)
+			hasGodoc := isValidGodocURL(godocURL, importLinksState)
 			if isVendored && hasGodoc {
-				nonStd[i] = fmt.Sprintf("[%s](%s) ([godoc](%s))", imp, "/vendor/"+imp, godocUrl)
+				nonStd[i] = fmt.Sprintf("[%s](%s) ([godoc](%s))", imp, "/vendor/"+imp, godocURL)
 				continue
 			}
 			if isVendored {
@@ -240,7 +241,7 @@ func listImportsFunc(info *godoc.PageInfo, imports []string, importPath string) 
 				continue
 			}
 			if hasGodoc {
-				nonStd[i] = fmt.Sprintf("[%s](%s)", imp, godocUrl)
+				nonStd[i] = fmt.Sprintf("[%s](%s)", imp, godocURL)
 			}
 		}
 	}
@@ -248,7 +249,7 @@ func listImportsFunc(info *godoc.PageInfo, imports []string, importPath string) 
 	return "- " + strings.Join(nonStd, "\n- ")
 }
 
-func isValidGodocUrl(url string, validityMap map[string]string) bool {
+func isValidGodocURL(url string, validityMap map[string]string) bool {
 	if validityMap != nil && validityMap[url] != "" {
 		return validityMap[url] == validImportKey
 	}
@@ -265,7 +266,7 @@ func isValidGodocUrl(url string, validityMap map[string]string) bool {
 
 	validityMap[url] = validity
 	if *importLinksFile != "" {
-		f, err := os.OpenFile(*importLinksFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		f, err := os.OpenFile(*importLinksFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return validity == validImportKey
 		}

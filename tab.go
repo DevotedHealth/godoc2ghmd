@@ -42,6 +42,7 @@ func (p *tconv) writeIndent() (err error) {
 	return
 }
 
+// nolint: gocyclo
 func (p *tconv) Write(data []byte) (n int, err error) {
 	if len(data) == 0 {
 		return
