@@ -1,5 +1,11 @@
-// (godoc-to-GitHub-MarkDown) generates package documentation in
+// godoc2ghmd (godoc-to-GitHub-MarkDown) generates package documentation in
 // GitHub flavoured Markdown.
+//
+// Install:
+//
+//	  go get https://github.com/DevotedHealth/godoc2ghmd
+//
+// This will install a binary into your go path.
 //
 // Usage:
 //
@@ -23,7 +29,7 @@
 // the creation of package documentation before sumbmitting code. For
 // example, this directive:
 //
-//go:generate godoc2ghmd -file=README.md github.com/GandalfUK/godoc2ghmd
+//go:generate godoc2ghmd -file=README.md github.com/DevotedHealth/godoc2ghmd
 //
 // in the  `documentation.go` file within this repositoy created this very
 // `README.md` file by running:
@@ -35,11 +41,10 @@
 //
 // History
 //
-// This is a fork of https://github.com/davecheney/godoc2md with (most of) the
-// changes from https://github.com/wdamron/godoc2gh rolled in. I have then
-// made some additional fixes and modifications. (I have changed the repo name
-// only to make it easier to work on these changes while keeping the previous
-// versions intact for comparison).
+// This is a fork of https://github.com/GandalfUK/godoc2ghmd, which itself is
+// a fork of https://github.com/davecheney/godoc2md and incorporating changes
+// from https://github.com/wdamron/godoc2gh.
+//
 package main
 
 // This comment block (re)generates the documentation in the examples folder.
