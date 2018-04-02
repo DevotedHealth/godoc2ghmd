@@ -1,4 +1,7 @@
-.PHONY: lint
+.PHONY: lint test
+
+test:
+	go test -cover .
 
 lint:
 	@echo "Checking if there are files that need gofmt (goimports) to be run"
