@@ -1,0 +1,8 @@
+{
+  "Fast": true,
+  "Skip": ["service_test", "proto", "filesystem/sftp", "sandbox", "mocks"],
+  "Vendor": true,
+  "LineLength": 120,
+  "EnableGC": true,
+  "Deadline": "180s"
+}
