@@ -14,13 +14,17 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"go/ast"
 	"go/build"
+	"go/doc"
+	"go/token"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -65,8 +69,8 @@ var (
 		"base":       path.Base,
 		"md":         mdFunc,
 		"pre":        preFunc,
-		"kebab":      kebabFunc,
-		"bitscape":   bitscapeFunc, //Escape [] for bitbucket confusion
+		"gh_url":     ghURLFunc,
+		"indent":     indentFunc,
 	}
 )
 
@@ -95,7 +99,7 @@ func srcLinkFunc(s string) string {
 	return s
 }
 
-// Removed code line that always substracted 10 from the value of `line`.
+// Removed code line that always subtracted 10 from the value of `line`.
 // Made format for the source link hash configurable to support source control platforms other than Github.
 // Original Source https://github.com/golang/tools/blob/master/godoc/godoc.go#L540
 func srcPosLinkFunc(s string, line, low, high int) string {
@@ -126,17 +130,49 @@ func readTemplate(name, data string) *template.Template {
 	return t
 }
 
-func kebabFunc(text string) string {
-	s := strings.Replace(strings.ToLower(text), " ", "-", -1)
-	s = strings.Replace(s, ".", "-", -1)
-	s = strings.Replace(s, "\\*", "42", -1)
-	return s
+func ghURLFunc(info *godoc.PageInfo, n interface{}) string {
+	var pos, end token.Pos
+
+	switch an := n.(type) {
+	case ast.Node:
+		pos = an.Pos()
+		end = an.End()
+	case *doc.Note:
+		pos = an.Pos
+		end = an.End
+	default:
+		panic(fmt.Sprintf("wrong type for gh_url template formatter: %T", an))
+	}
+
+	var posLine int
+	var filePath string
+	var linesFragment string
+	if pos.IsValid() {
+		p := info.FSet.Position(pos)
+		posLine = p.Line
+		filePath = p.Filename
+		if strings.HasPrefix(filePath, "/target/") {
+			filePath = filePath[len("/target/"):]
+		}
+		linesFragment = "#L" + strconv.Itoa(posLine)
+	}
+	if end.IsValid() {
+		endPos := info.FSet.Position(end)
+		if endPos.Line > posLine {
+			linesFragment += "-L" + strconv.Itoa(endPos.Line)
+		}
+	}
+
+	return "./" + filePath + linesFragment
 }
 
-func bitscapeFunc(text string) string {
-	s := strings.Replace(text, "[", "\\[", -1)
-	s = strings.Replace(s, "]", "\\]", -1)
-	return s
+func indentFunc(depth int) string {
+	if depth < 0 {
+		depth = 0
+	}
+
+	indent := "    "
+	return strings.Repeat(indent, depth)
 }
 
 func main() {
