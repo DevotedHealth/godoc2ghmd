@@ -242,7 +242,7 @@ func blocks(text string) []block {
 	unindent(lines)
 	for i := 0; i < len(lines); {
 		line := lines[i]
-		if isBlank(line) {
+		if isBlank(line) || strings.HasPrefix(line, "Code generated") {
 			// close paragraph
 			close()
 			i++
